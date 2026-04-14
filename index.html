@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <title>Propagation Time Machine</title>
 
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 
     <style>
@@ -64,19 +63,6 @@
             background: #0a84ff;
         }
 
-        #noaaBox {
-            background: #181818;
-            padding: 15px;
-            border-radius: 6px;
-            border: 1px solid #333;
-        }
-
-        #noaaBox h3 {
-            margin-top: 0;
-            margin-bottom: 8px;
-            color: #4da3ff;
-        }
-
         #map {
             flex: 1;
             height: 100%;
@@ -112,12 +98,12 @@
             </select>
         </div>
 
-        <button id="analyzeBtn">Analyser la propagation</button>
-
-        <div id="noaaBox">
-            <h3>Données NOAA</h3>
-            <p id="noaaData">Aucune donnée chargée.</p>
+        <div>
+            <label>Locator par défaut :</label>
+            <input type="text" id="defaultLocator" placeholder="ex: JO20HQ">
         </div>
+
+        <button id="analyzeBtn">Afficher les QSO</button>
     </div>
 
     <div id="map"></div>
@@ -131,75 +117,63 @@
             maxZoom: 18
         }).addTo(map);
 
+        // Convertit un locator Maidenhead en latitude/longitude
+        function locatorToLatLon(locator) {
+            locator = locator.toUpperCase();
+
+            if (locator.length < 4) return null;
+
+            const A = 'A'.charCodeAt(0);
+
+            const lon = (locator.charCodeAt(0) - A) * 20 - 180 +
+                        parseInt(locator[2]) * 2 +
+                        (locator.length >= 6 ? (locator.charCodeAt(4) - A) / 12 : 0);
+
+            const lat = (locator.charCodeAt(1) - A) * 10 - 90 +
+                        parseInt(locator[3]) +
+                        (locator.length >= 6 ? (locator.charCodeAt(5) - A) / 24 : 0);
+
+            return { lat, lon };
+        }
+
+        // Lecture ADIF simple
         function parseADIF(text) {
             const qsos = [];
             const records = text.split(/<eor>/i);
+
             records.forEach(r => {
                 const call = r.match(/<call:\d+>([^<]+)/i);
                 const band = r.match(/<band:\d+>([^<]+)/i);
-                const lat = r.match(/<lat:\d+>([^<]+)/i);
-                const lon = r.match(/<lon:\d+>([^<]+)/i);
+                const grid = r.match(/<gridsquare:\d+>([^<]+)/i);
 
-                if (call && band && lat && lon) {
-                    qsos.push({
-                        call: call[1],
-                        band: band[1],
-                        lat: parseFloat(lat[1]),
-                        lon: parseFloat(lon[1])
-                    });
-                }
+                qsos.push({
+                    call: call ? call[1] : "UNKNOWN",
+                    band: band ? band[1] : "",
+                    grid: grid ? grid[1] : null
+                });
             });
+
             return qsos;
-        }
-
-        // API NOAA HISTORIQUE (COMPLÈTE)
-        async function loadNOAAHistorical(date) {
-            const yyyy = date.slice(0, 4);
-            const mm = date.slice(5, 7);
-            const dd = date.slice(8, 10);
-
-            const url = `https://services.swpc.noaa.gov/json/solar_indices/daily_solar_data.json`;
-
-            try {
-                const res = await fetch(url);
-                const data = await res.json();
-
-                // Format NOAA : YYYY-MM-DDT00:00:00Z
-                const exact = `${yyyy}-${mm}-${dd}`;
-
-                // 1) Cherche la date exacte
-                let entry = data.find(d => d.time_tag.startsWith(exact));
-
-                // 2) Sinon cherche le mois
-                if (!entry) {
-                    entry = data.find(d => d.time_tag.startsWith(`${yyyy}-${mm}`));
-                }
-
-                // 3) Sinon prend la dernière valeur disponible
-                if (!entry) {
-                    entry = data[data.length - 1];
-                }
-
-                return {
-                    sfi: entry.solar_flux,
-                    ssn: entry.ssn,
-                    kp: entry.kp,
-                    ap: entry.ap
-                };
-
-            } catch (err) {
-                console.error("Erreur NOAA :", err);
-                return null;
-            }
         }
 
         document.getElementById("analyzeBtn").onclick = async () => {
             const file = document.getElementById("adifFile").files[0];
-            const date = document.getElementById("dateInput").value;
             const band = document.getElementById("bandSelect").value;
+            const defaultLocator = document.getElementById("defaultLocator").value.trim();
 
-            if (!file || !date) {
-                alert("Veuillez sélectionner un fichier ADIF et une date.");
+            if (!file) {
+                alert("Veuillez sélectionner un fichier ADIF.");
+                return;
+            }
+
+            if (!defaultLocator) {
+                alert("Veuillez entrer un locator par défaut (ex: JO20HQ).");
+                return;
+            }
+
+            const defaultPos = locatorToLatLon(defaultLocator);
+            if (!defaultPos) {
+                alert("Locator invalide.");
                 return;
             }
 
@@ -210,27 +184,28 @@
                 qsos = qsos.filter(q => q.band === band);
             }
 
+            // Nettoyage des anciens marqueurs
             map.eachLayer(layer => {
                 if (layer instanceof L.Marker) {
                     map.removeLayer(layer);
                 }
             });
 
+            // Affichage QSO
             qsos.forEach(q => {
-                L.marker([q.lat, q.lon]).addTo(map)
-                    .bindPopup(`<b>${q.call}</b><br>Bande : ${q.band}`);
-            });
+                let pos = null;
 
-            const noaa = await loadNOAAHistorical(date);
-            if (noaa) {
-                document.getElementById("noaaData").innerHTML =
-                    `SFI : ${noaa.sfi}<br>` +
-                    `SSN : ${noaa.ssn}<br>` +
-                    `Kp : ${noaa.kp}<br>` +
-                    `A-index : ${noaa.ap}`;
-            } else {
-                document.getElementById("noaaData").innerHTML = "Aucune donnée NOAA trouvée.";
-            }
+                if (q.grid) {
+                    pos = locatorToLatLon(q.grid);
+                }
+
+                if (!pos) {
+                    pos = defaultPos;
+                }
+
+                L.marker([pos.lat, pos.lon]).addTo(map)
+                    .bindPopup(`<b>${q.call}</b><br>Bande : ${q.band}<br>Locator : ${q.grid || defaultLocator}`);
+            });
         };
     </script>
 
