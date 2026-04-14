@@ -146,11 +146,13 @@
                 const band = r.match(/<band:\d+>([^<]+)/i);
                 const grid = r.match(/<gridsquare:\d+>([^<]+)/i);
 
-                qsos.push({
-                    call: call ? call[1] : "UNKNOWN",
-                    band: band ? band[1] : "",
-                    grid: grid ? grid[1] : null
-                });
+                if (call) {
+                    qsos.push({
+                        call: call[1],
+                        band: band ? band[1] : "",
+                        grid: grid ? grid[1] : null
+                    });
+                }
             });
 
             return qsos;
