@@ -119,7 +119,7 @@
 
         // --- Conversion locator Maidenhead → lat/lon ---
         function locatorToLatLon(locator) {
-            locator = locator.toUpperCase();
+            locator = locator.toUpperCase().trim();
             if (locator.length < 4) return null;
 
             const A = 'A'.charCodeAt(0);
@@ -161,7 +161,7 @@
         };
 
         function getDXCCPosition(call) {
-            call = call.toUpperCase();
+            call = call.toUpperCase().trim();
 
             // préfixes longs d'abord
             for (let p of ["EA8", "KH6", "KL7"]) {
@@ -176,32 +176,43 @@
             return null;
         }
 
-        // --- Lecture ADIF robuste ---
+        // --- Lecture ADIF robuste (N1MM, variantes, espaces, etc.) ---
         function parseADIF(text) {
             const qsos = [];
-            const records = text.split(/<eor>/i);
+            const lower = text.toLowerCase();
+            let index = 0;
 
-            records.forEach(r => {
-                const call = r.match(/<call(:\d+)?(:\w+)?>\s*([^<\s]+)/i);
-                const band = r.match(/<band(:\d+)?(:\w+)?>\s*([^<\s]+)/i);
-                const grid = r.match(/<gridsquare(:\d+)?(:\w+)?>\s*([^<\s]+)/i);
+            while (true) {
+                const callIdx = lower.indexOf("<call", index);
+                if (callIdx === -1) break;
 
-                if (call) {
+                const eorIdx = lower.indexOf("<eor>", callIdx);
+                const end = eorIdx === -1 ? text.length : eorIdx;
+
+                const record = text.slice(callIdx, end);
+
+                const callMatch = record.match(/<call[^>]*>\s*([^<\s]+)/i);
+                const bandMatch = record.match(/<band[^>]*>\s*([^<\s]+)/i);
+                const gridMatch = record.match(/<gridsquare[^>]*>\s*([^<\s]+)/i);
+
+                if (callMatch) {
                     qsos.push({
-                        call: call[3],
-                        band: band ? band[3] : "",
-                        grid: grid ? grid[3] : null
+                        call: callMatch[1].trim(),
+                        band: bandMatch ? bandMatch[1].trim() : "",
+                        grid: gridMatch ? gridMatch[1].trim() : null
                     });
                 }
-            });
+
+                if (eorIdx === -1) break;
+                index = eorIdx + 5;
+            }
 
             return qsos;
         }
 
-        // --- Bouton principal ---
         document.getElementById("analyzeBtn").onclick = async () => {
             const file = document.getElementById("adifFile").files[0];
-            const band = document.getElementById("bandSelect").value;
+            const bandFilter = document.getElementById("bandSelect").value.trim();
             const defaultLocator = document.getElementById("defaultLocator").value.trim();
 
             if (!file) {
@@ -223,18 +234,17 @@
             const text = await file.text();
             let qsos = parseADIF(text);
 
-            if (band) {
-                qsos = qsos.filter(q => q.band === band);
+            if (bandFilter) {
+                const bf = bandFilter.toUpperCase();
+                qsos = qsos.filter(q => (q.band || "").toUpperCase() === bf);
             }
 
-            // Nettoyage des anciens marqueurs
             map.eachLayer(layer => {
                 if (layer instanceof L.Marker) {
                     map.removeLayer(layer);
                 }
             });
 
-            // --- Affichage des QSO ---
             qsos.forEach(q => {
                 let pos = null;
 
@@ -243,7 +253,11 @@
                 if (!pos) pos = defaultPos;
 
                 L.marker([pos.lat, pos.lon]).addTo(map)
-                    .bindPopup(`<b>${q.call}</b><br>Bande : ${q.band}<br>Locator : ${q.grid || "DXCC / défaut"}`);
+                    .bindPopup(
+                        `<b>${q.call}</b><br>` +
+                        `Bande : ${q.band || "?"}<br>` +
+                        `Locator : ${q.grid || "DXCC / défaut"}`
+                    );
             });
         };
     </script>
