@@ -18,7 +18,6 @@
             overflow: hidden;
         }
 
-        /* Sidebar fixe */
         #sidebar {
             width: 320px;
             background: #111;
@@ -87,7 +86,6 @@
 
 <body>
 
-    <!-- SIDEBAR FIXE -->
     <div id="sidebar">
         <h2>Propagation Time Machine</h2>
 
@@ -122,21 +120,17 @@
         </div>
     </div>
 
-    <!-- CARTE -->
     <div id="map"></div>
 
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // Initialisation de la carte
         const map = L.map('map').setView([20, 0], 2);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 18
         }).addTo(map);
 
-        // Lecture ADIF simple
         function parseADIF(text) {
             const qsos = [];
             const records = text.split(/<eor>/i);
@@ -158,20 +152,23 @@
             return qsos;
         }
 
-        // NOAA API journalière + fallback automatique
-        async function loadNOAADaily(date) {
+        // API NOAA HISTORIQUE (COMPLÈTE)
+        async function loadNOAAHistorical(date) {
             const yyyy = date.slice(0, 4);
             const mm = date.slice(5, 7);
             const dd = date.slice(8, 10);
 
-            const url = "https://services.swpc.noaa.gov/json/solar_indices/synoptic.json";
+            const url = `https://services.swpc.noaa.gov/json/solar_indices/daily_solar_data.json`;
 
             try {
                 const res = await fetch(url);
                 const data = await res.json();
 
+                // Format NOAA : YYYY-MM-DDT00:00:00Z
+                const exact = `${yyyy}-${mm}-${dd}`;
+
                 // 1) Cherche la date exacte
-                let entry = data.find(d => d.time_tag.startsWith(`${yyyy}-${mm}-${dd}`));
+                let entry = data.find(d => d.time_tag.startsWith(exact));
 
                 // 2) Sinon cherche le mois
                 if (!entry) {
@@ -196,7 +193,6 @@
             }
         }
 
-        // Analyse
         document.getElementById("analyzeBtn").onclick = async () => {
             const file = document.getElementById("adifFile").files[0];
             const date = document.getElementById("dateInput").value;
@@ -214,21 +210,18 @@
                 qsos = qsos.filter(q => q.band === band);
             }
 
-            // Nettoyage des anciens marqueurs
             map.eachLayer(layer => {
                 if (layer instanceof L.Marker) {
                     map.removeLayer(layer);
                 }
             });
 
-            // Affichage QSO
             qsos.forEach(q => {
                 L.marker([q.lat, q.lon]).addTo(map)
                     .bindPopup(`<b>${q.call}</b><br>Bande : ${q.band}`);
             });
 
-            // NOAA journalière
-            const noaa = await loadNOAADaily(date);
+            const noaa = await loadNOAAHistorical(date);
             if (noaa) {
                 document.getElementById("noaaData").innerHTML =
                     `SFI : ${noaa.sfi}<br>` +
