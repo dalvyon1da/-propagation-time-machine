@@ -117,7 +117,7 @@
             maxZoom: 18
         }).addTo(map);
 
-        // --- Conversion locator Maidenhead → lat/lon ---
+        // Conversion locator Maidenhead → lat/lon
         function locatorToLatLon(locator) {
             locator = locator.toUpperCase().trim();
             if (locator.length < 4) return null;
@@ -135,7 +135,7 @@
             return { lat, lon };
         }
 
-        // --- Base DXCC simplifiée ---
+        // Base DXCC simplifiée
         const dxccPositions = {
             "ON": { lat: 50.8, lon: 4.4 },
             "F": { lat: 46.5, lon: 2.5 },
@@ -163,12 +163,10 @@
         function getDXCCPosition(call) {
             call = call.toUpperCase().trim();
 
-            // préfixes longs d'abord
             for (let p of ["EA8", "KH6", "KL7"]) {
-                if (call.startsWith(p)) return dxccPositions[p];
+                if (call.startsWith(p) && dxccPositions[p]) return dxccPositions[p];
             }
 
-            // préfixes courts
             for (let p in dxccPositions) {
                 if (call.startsWith(p)) return dxccPositions[p];
             }
@@ -176,14 +174,14 @@
             return null;
         }
 
-        // --- Lecture ADIF robuste (N1MM, variantes, espaces, etc.) ---
+        // Parse ADIF robuste : on parcourt tous les <CALL ...> et on prend jusqu'à <EOR>
         function parseADIF(text) {
             const qsos = [];
             const lower = text.toLowerCase();
-            let index = 0;
+            let idx = 0;
 
             while (true) {
-                const callIdx = lower.indexOf("<call", index);
+                const callIdx = lower.indexOf("<call", idx);
                 if (callIdx === -1) break;
 
                 const eorIdx = lower.indexOf("<eor>", callIdx);
@@ -204,7 +202,7 @@
                 }
 
                 if (eorIdx === -1) break;
-                index = eorIdx + 5;
+                idx = eorIdx + 5;
             }
 
             return qsos;
