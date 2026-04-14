@@ -39,10 +39,20 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const map = L.map('map').setView([50.8, 4.4], 3);
+const map = L.map('map').setView([50.8, 4.4], 4);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-// PARSEUR MINIMAL : basé uniquement sur <CALL>, <BAND>
+// Conversion locator
+function locatorToLatLon(locator) {
+    locator = locator.toUpperCase().trim();
+    if (locator.length < 4) return null;
+    const A = 'A'.charCodeAt(0);
+    const lon = (locator.charCodeAt(0)-A)*20 -180 + parseInt(locator[2])*2;
+    const lat = (locator.charCodeAt(1)-A)*10 -90 + parseInt(locator[3]);
+    return { lat, lon };
+}
+
+// Parseur basé sur <CALL>
 function parseADIF(text) {
     const qsos = [];
     const regex = /<call[^>]*>\s*([^<\s]+)/gi;
@@ -51,7 +61,6 @@ function parseADIF(text) {
     while ((match = regex.exec(text)) !== null)
         positions.push({ index: match.index, call: match[1].trim() });
 
-    if (positions.length === 0) return qsos;
     positions.push({ index: text.length });
 
     for (let i=0; i<positions.length-1; i++) {
@@ -70,8 +79,8 @@ document.getElementById("analyzeBtn").onclick = async () => {
     const text = await file.text();
     const qsos = parseADIF(text);
 
-    // 1) Info + table
     document.getElementById("info").textContent = `QSO détectés : ${qsos.length}`;
+
     const tbody = document.querySelector("#qsoTable tbody");
     tbody.innerHTML = "";
     qsos.forEach((q, i) => {
@@ -80,16 +89,16 @@ document.getElementById("analyzeBtn").onclick = async () => {
         tbody.appendChild(tr);
     });
 
-    // 2) Carte : un point fixe pour chaque QSO (JO20HQ ≈ 50.8, 4.4)
-    map.eachLayer(l => { if (l instanceof L.Marker) map.removeLayer(l); });
-    qsos.forEach(() => {
-        L.circleMarker([50.8, 4.4], { radius:3, color:"red" }).addTo(map);
-    });
+    // Position JO20HQ forcée
+    const pos = locatorToLatLon("JO20HQ");
 
-    console.log("QSO parsés :", qsos);
+    map.eachLayer(l => { if (l instanceof L.Marker) map.removeLayer(l); });
+
+    qsos.forEach(() => {
+        L.circleMarker([pos.lat, pos.lon], { radius:3, color:"red" }).addTo(map);
+    });
 };
 </script>
 
 </body>
 </html>
-
