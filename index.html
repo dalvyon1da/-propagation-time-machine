@@ -4,272 +4,134 @@
     <meta charset="UTF-8">
     <title>Propagation Time Machine</title>
 
-    <!-- Leaflet de base -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-
-    <!-- Leaflet MarkerCluster -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css">
 
     <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background: #1e1e1e;
-            color: #e0e0e0;
-            display: flex;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        #sidebar {
-            width: 320px;
-            background: #111;
-            padding: 20px;
-            box-shadow: 3px 0 10px rgba(0,0,0,0.4);
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        #sidebar h2 {
-            margin: 0;
-            font-size: 22px;
-            color: #4da3ff;
-        }
-
-        label {
-            font-size: 14px;
-            margin-bottom: 5px;
-            display: block;
-        }
-
-        input, select {
-            width: 100%;
-            padding: 10px;
-            background: #222;
-            border: 1px solid #444;
-            color: #fff;
-            border-radius: 6px;
-        }
-
-        button {
-            padding: 12px;
-            background: #007bff;
-            border: none;
-            color: white;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 15px;
-            transition: 0.2s;
-        }
-
-        button:hover {
-            background: #0a84ff;
-        }
-
-        #map {
-            flex: 1;
-            height: 100%;
-        }
+        body { margin:0; font-family:Arial; background:#1e1e1e; color:#e0e0e0; display:flex; height:100vh; }
+        #sidebar { width:320px; background:#111; padding:20px; display:flex; flex-direction:column; gap:20px; }
+        #map { flex:1; }
+        input, select { width:100%; padding:10px; background:#222; border:1px solid #444; color:#fff; border-radius:6px; }
+        button { padding:12px; background:#007bff; border:none; color:white; border-radius:6px; cursor:pointer; }
+        button:hover { background:#0a84ff; }
     </style>
 </head>
 
 <body>
 
-    <div id="sidebar">
-        <h2>Propagation Time Machine</h2>
+<div id="sidebar">
+    <h2>Propagation Time Machine</h2>
 
-        <div>
-            <label>Importer un fichier ADIF :</label>
-            <input type="file" id="adifFile" accept=".adi,.adif">
-        </div>
+    <label>Importer un fichier ADIF :</label>
+    <input type="file" id="adifFile" accept=".adi,.adif">
 
-        <div>
-            <label>Date :</label>
-            <input type="date" id="dateInput">
-        </div>
+    <label>Bande :</label>
+    <select id="bandSelect">
+        <option value="">Toutes</option>
+        <option value="160M">160m</option>
+        <option value="80M">80m</option>
+        <option value="40M">40m</option>
+        <option value="20M">20m</option>
+        <option value="15M">15m</option>
+        <option value="10M">10m</option>
+    </select>
 
-        <div>
-            <label>Bande :</label>
-            <select id="bandSelect">
-                <option value="">Toutes</option>
-                <option value="160M">160m</option>
-                <option value="80M">80m</option>
-                <option value="40M">40m</option>
-                <option value="20M">20m</option>
-                <option value="15M">15m</option>
-                <option value="10M">10m</option>
-            </select>
-        </div>
+    <label>Locator par défaut :</label>
+    <input type="text" id="defaultLocator" placeholder="ex: JO20HQ">
 
-        <div>
-            <label>Locator par défaut :</label>
-            <input type="text" id="defaultLocator" placeholder="ex: JO20HQ">
-        </div>
+    <button id="analyzeBtn">Afficher les QSO</button>
+</div>
 
-        <button id="analyzeBtn">Afficher les QSO</button>
-    </div>
+<div id="map"></div>
 
-    <div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
 
-    <!-- Scripts Leaflet -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+<script>
+const map = L.map('map').setView([20, 0], 2);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    <script>
-        // Initialisation carte
-        const map = L.map('map').setView([20, 0], 2);
+// Conversion locator
+function locatorToLatLon(locator) {
+    locator = locator.toUpperCase().trim();
+    if (locator.length < 4) return null;
+    const A = 'A'.charCodeAt(0);
+    const lon = (locator.charCodeAt(0)-A)*20 -180 + parseInt(locator[2])*2;
+    const lat = (locator.charCodeAt(1)-A)*10 -90 + parseInt(locator[3]);
+    return { lat, lon };
+}
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 18
-        }).addTo(map);
+// DXCC simplifié
+const dxccPositions = {
+    "ON":{lat:50.8,lon:4.4}, "F":{lat:46.5,lon:2.5}, "DL":{lat:51,lon:10},
+    "EA":{lat:40.4,lon:-3.7}, "EA8":{lat:28.3,lon:-16.5}, "G":{lat:52.3,lon:-1.5},
+    "I":{lat:42.5,lon:12.5}, "PA":{lat:52.1,lon:5.3}, "OK":{lat:49.8,lon:15.5},
+    "K":{lat:39.8,lon:-98.6}, "W":{lat:39.8,lon:-98.6}, "N":{lat:39.8,lon:-98.6},
+    "VE":{lat:56.1,lon:-106.3}
+};
 
-        // Conversion locator Maidenhead → lat/lon
-        function locatorToLatLon(locator) {
-            locator = locator.toUpperCase().trim();
-            if (locator.length < 4) return null;
+function getDXCCPosition(call) {
+    call = call.toUpperCase();
+    for (let p of ["EA8","KH6","KL7"]) if (call.startsWith(p)) return dxccPositions[p];
+    for (let p in dxccPositions) if (call.startsWith(p)) return dxccPositions[p];
+    return null;
+}
 
-            const A = 'A'.charCodeAt(0);
+// Parseur basé sur <CALL>
+function parseADIF(text) {
+    const qsos = [];
+    const regex = /<call[^>]*>\s*([^<\s]+)/gi;
+    let match, positions = [];
 
-            const lon = (locator.charCodeAt(0) - A) * 20 - 180 +
-                        parseInt(locator[2]) * 2 +
-                        (locator.length >= 6 ? (locator.charCodeAt(4) - A) / 12 : 0);
+    while ((match = regex.exec(text)) !== null)
+        positions.push({ index: match.index, call: match[1].trim() });
 
-            const lat = (locator.charCodeAt(1) - A) * 10 - 90 +
-                        parseInt(locator[3]) +
-                        (locator.length >= 6 ? (locator.charCodeAt(5) - A) / 24 : 0);
+    positions.push({ index: text.length });
 
-            return { lat, lon };
-        }
+    for (let i=0; i<positions.length-1; i++) {
+        const block = text.slice(positions[i].index, positions[i+1].index);
+        const call = positions[i].call;
+        const band = (block.match(/<band[^>]*>\s*([^<\s]+)/i) || [,""])[1];
+        const grid = (block.match(/<gridsquare[^>]*>\s*([^<\s]+)/i) || [,""])[1];
+        qsos.push({ call, band, grid });
+    }
+    return qsos;
+}
 
-        // DXCC simplifié
-        const dxccPositions = {
-            "ON": { lat: 50.8, lon: 4.4 },
-            "F":  { lat: 46.5, lon: 2.5 },
-            "DL": { lat: 51.0, lon: 10.0 },
-            "EA": { lat: 40.4, lon: -3.7 },
-            "EA8":{ lat: 28.3, lon: -16.5 },
-            "G":  { lat: 52.3, lon: -1.5 },
-            "I":  { lat: 42.5, lon: 12.5 },
-            "PA": { lat: 52.1, lon: 5.3 },
-            "OK": { lat: 49.8, lon: 15.5 },
-            "K":  { lat: 39.8, lon: -98.6 },
-            "W":  { lat: 39.8, lon: -98.6 },
-            "N":  { lat: 39.8, lon: -98.6 },
-            "VE": { lat: 56.1, lon: -106.3 }
-        };
+document.getElementById("analyzeBtn").onclick = async () => {
+    const file = document.getElementById("adifFile").files[0];
+    const bandFilter = document.getElementById("bandSelect").value.toUpperCase();
+    const defaultLocator = document.getElementById("defaultLocator").value.trim();
 
-        function getDXCCPosition(call) {
-            call = call.toUpperCase().trim();
+    const defaultPos = locatorToLatLon(defaultLocator);
+    const text = await file.text();
+    let qsos = parseADIF(text);
 
-            for (let p of ["EA8", "KH6", "KL7"]) {
-                if (call.startsWith(p) && dxccPositions[p]) return dxccPositions[p];
-            }
+    alert("QSO détectés : " + qsos.length);
 
-            for (let p in dxccPositions) {
-                if (call.startsWith(p)) return dxccPositions[p];
-            }
+    if (bandFilter)
+        qsos = qsos.filter(q => q.band.toUpperCase() === bandFilter);
 
-            return null;
-        }
+    const markers = L.markerClusterGroup();
 
-        // Parseur ADIF basé uniquement sur <CALL>
-        function parseADIF(text) {
-            const qsos = [];
+    qsos.forEach(q => {
+        let pos = null;
 
-            const regex = /<call[^>]*>\s*([^<\s]+)/gi;
-            let match;
-            let positions = [];
+        if (q.grid) pos = locatorToLatLon(q.grid);
+        if (!pos) pos = getDXCCPosition(q.call);
+        if (!pos) pos = defaultPos; // 🔥 Fallback sûr
 
-            while ((match = regex.exec(text)) !== null) {
-                positions.push({ index: match.index, call: match[1].trim() });
-            }
+        markers.addLayer(
+            L.marker([pos.lat, pos.lon]).bindPopup(
+                `<b>${q.call}</b><br>Bande : ${q.band}<br>Locator : ${q.grid || "fallback"}`
+            )
+        );
+    });
 
-            if (positions.length === 0) return qsos;
-
-            positions.push({ index: text.length, call: null });
-
-            for (let i = 0; i < positions.length - 1; i++) {
-                const start = positions[i].index;
-                const end = positions[i + 1].index;
-                const block = text.slice(start, end);
-
-                const call = positions[i].call;
-
-                const bandMatch = block.match(/<band[^>]*>\s*([^<\s]+)/i);
-                const gridMatch = block.match(/<gridsquare[^>]*>\s*([^<\s]+)/i);
-
-                qsos.push({
-                    call: call,
-                    band: bandMatch ? bandMatch[1].trim() : "",
-                    grid: gridMatch ? gridMatch[1].trim() : null
-                });
-            }
-
-            return qsos;
-        }
-
-        document.getElementById("analyzeBtn").onclick = async () => {
-            const file = document.getElementById("adifFile").files[0];
-            const bandFilter = document.getElementById("bandSelect").value.trim();
-            const defaultLocator = document.getElementById("defaultLocator").value.trim();
-
-            if (!file) {
-                alert("Veuillez sélectionner un fichier ADIF.");
-                return;
-            }
-
-            if (!defaultLocator) {
-                alert("Veuillez entrer un locator par défaut (ex: JO20HQ).");
-                return;
-            }
-
-            const defaultPos = locatorToLatLon(defaultLocator);
-            if (!defaultPos) {
-                alert("Locator invalide.");
-                return;
-            }
-
-            const text = await file.text();
-            let qsos = parseADIF(text);
-
-            alert("QSO détectés : " + qsos.length);
-
-            if (bandFilter) {
-                const bf = bandFilter.toUpperCase();
-                qsos = qsos.filter(q => (q.band || "").toUpperCase() === bf);
-            }
-
-            // Nettoyage des anciens clusters
-            map.eachLayer(layer => {
-                if (layer instanceof L.MarkerClusterGroup) {
-                    map.removeLayer(layer);
-                }
-            });
-
-            const markers = L.markerClusterGroup();
-
-            qsos.forEach(q => {
-                let pos = null;
-
-                if (q.grid) pos = locatorToLatLon(q.grid);
-                if (!pos) pos = getDXCCPosition(q.call);
-                if (!pos) pos = defaultPos;
-
-                const marker = L.marker([pos.lat, pos.lon])
-                    .bindPopup(
-                        `<b>${q.call}</b><br>` +
-                        `Bande : ${q.band || "?"}<br>` +
-                        `Locator : ${q.grid || "DXCC / défaut"}`
-                    );
-
-                markers.addLayer(marker);
-            });
-
-            map.addLayer(markers);
-        };
-    </script>
+    map.addLayer(markers);
+};
+</script>
 
 </body>
 </html>
