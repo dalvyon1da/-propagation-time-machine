@@ -3,9 +3,207 @@
 <head>
     <meta charset="UTF-8">
     <title>Propagation Time Machine</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #1e1e1e;
+            color: #e0e0e0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar fixe */
+        #sidebar {
+            width: 320px;
+            background: #111;
+            padding: 20px;
+            box-shadow: 3px 0 10px rgba(0,0,0,0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        #sidebar h2 {
+            margin: 0;
+            font-size: 22px;
+            color: #4da3ff;
+        }
+
+        label {
+            font-size: 14px;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px;
+            background: #222;
+            border: 1px solid #444;
+            color: #fff;
+            border-radius: 6px;
+        }
+
+        button {
+            padding: 12px;
+            background: #007bff;
+            border: none;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 15px;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #0a84ff;
+        }
+
+        #noaaBox {
+            background: #181818;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #333;
+        }
+
+        #map {
+            flex: 1;
+            height: 100%;
+        }
+    </style>
 </head>
+
 <body>
-    <h1>Bienvenue dans ton projet Propagation Time Machine</h1>
-    <p>Ton site GitHub Pages fonctionne !</p>
+
+    <!-- SIDEBAR FIXE -->
+    <div id="sidebar">
+        <h2>Propagation Time Machine</h2>
+
+        <div>
+            <label>Importer un fichier ADIF :</label>
+            <input type="file" id="adifFile" accept=".adi,.adif">
+        </div>
+
+        <div>
+            <label>Date :</label>
+            <input type="date" id="dateInput">
+        </div>
+
+        <div>
+            <label>Bande :</label>
+            <select id="bandSelect">
+                <option value="">Toutes</option>
+                <option value="160m">160m</option>
+                <option value="80m">80m</option>
+                <option value="40m">40m</option>
+                <option value="20m">20m</option>
+                <option value="15m">15m</option>
+                <option value="10m">10m</option>
+            </select>
+        </div>
+
+        <button id="analyzeBtn">Analyser la propagation</button>
+
+        <div id="noaaBox">
+            <h3>Données NOAA</h3>
+            <p id="noaaData">Aucune donnée chargée.</p>
+        </div>
+    </div>
+
+    <!-- CARTE -->
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // Initialisation de la carte
+        const map = L.map('map').setView([20, 0], 2);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18
+        }).addTo(map);
+
+        // Lecture ADIF simple
+        function parseADIF(text) {
+            const qsos = [];
+            const records = text.split('<eor>');
+            records.forEach(r => {
+                const call = r.match(/<call:\d+>([^<]+)/i);
+                const band = r.match(/<band:\d+>([^<]+)/i);
+                const lat = r.match(/<lat:\d+>([^<]+)/i);
+                const lon = r.match(/<lon:\d+>([^<]+)/i);
+
+                if (call && band && lat && lon) {
+                    qsos.push({
+                        call: call[1],
+                        band: band[1],
+                        lat: parseFloat(lat[1]),
+                        lon: parseFloat(lon[1])
+                    });
+                }
+            });
+            return qsos;
+        }
+
+        // NOAA API
+        async function loadNOAA(date) {
+            const url = `https://services.swpc.noaa.gov/json/solar-cycle/observed-solar-cycle-indices.json`;
+            const res = await fetch(url);
+            const data = await res.json();
+
+            const entry = data.find(d => d.time_tag.startsWith(date.slice(0, 7)));
+
+            if (!entry) return null;
+
+            return {
+                sfi: entry.solar_flux,
+                ssn: entry.ssn,
+                kp: entry.kp,
+                ap: entry.ap
+            };
+        }
+
+        // Analyse
+        document.getElementById("analyzeBtn").onclick = async () => {
+            const file = document.getElementById("adifFile").files[0];
+            const date = document.getElementById("dateInput").value;
+            const band = document.getElementById("bandSelect").value;
+
+            if (!file || !date) {
+                alert("Veuillez sélectionner un fichier ADIF et une date.");
+                return;
+            }
+
+            const text = await file.text();
+            let qsos = parseADIF(text);
+
+            if (band) {
+                qsos = qsos.filter(q => q.band === band);
+            }
+
+            // Affichage QSO
+            qsos.forEach(q => {
+                L.marker([q.lat, q.lon]).addTo(map)
+                    .bindPopup(`<b>${q.call}</b><br>Bande : ${q.band}`);
+            });
+
+            // NOAA
+            const noaa = await loadNOAA(date);
+            if (noaa) {
+                document.getElementById("noaaData").innerHTML =
+                    `SFI : ${noaa.sfi}<br>SSN : ${noaa.ssn}<br>Kp : ${noaa.kp}<br>A-index : ${noaa.ap}`;
+            } else {
+                document.getElementById("noaaData").innerHTML = "Aucune donnée NOAA trouvée.";
+            }
+        };
+    </script>
+
 </body>
 </html>
