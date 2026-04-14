@@ -164,21 +164,21 @@
             const mm = date.slice(5, 7);
             const dd = date.slice(8, 10);
 
-            const url = 'https://services.swpc.noaa.gov/json/solar_indices/synoptic.json';
+            const url = "https://services.swpc.noaa.gov/json/solar_indices/synoptic.json";
 
             try {
                 const res = await fetch(url);
                 const data = await res.json();
 
-                // Cherche la date exacte
+                // 1) Cherche la date exacte
                 let entry = data.find(d => d.time_tag.startsWith(`${yyyy}-${mm}-${dd}`));
 
-                // Si pas trouvé → fallback sur le mois
+                // 2) Sinon cherche le mois
                 if (!entry) {
                     entry = data.find(d => d.time_tag.startsWith(`${yyyy}-${mm}`));
                 }
 
-                // Si toujours pas trouvé → fallback sur la dernière valeur dispo
+                // 3) Sinon prend la dernière valeur disponible
                 if (!entry) {
                     entry = data[data.length - 1];
                 }
@@ -214,7 +214,7 @@
                 qsos = qsos.filter(q => q.band === band);
             }
 
-            // Nettoyage des anciens marqueurs (simple : on recrée la carte)
+            // Nettoyage des anciens marqueurs
             map.eachLayer(layer => {
                 if (layer instanceof L.Marker) {
                     map.removeLayer(layer);
