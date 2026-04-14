@@ -117,10 +117,9 @@
             maxZoom: 18
         }).addTo(map);
 
-        // Convertit un locator Maidenhead en latitude/longitude
+        // --- Conversion locator Maidenhead → lat/lon ---
         function locatorToLatLon(locator) {
             locator = locator.toUpperCase();
-
             if (locator.length < 4) return null;
 
             const A = 'A'.charCodeAt(0);
@@ -136,7 +135,48 @@
             return { lat, lon };
         }
 
-        // Lecture ADIF simple
+        // --- Base DXCC simplifiée (fallback pays) ---
+        const dxccPositions = {
+            "ON": { lat: 50.8, lon: 4.4 },
+            "F": { lat: 46.5, lon: 2.5 },
+            "DL": { lat: 51.0, lon: 10.0 },
+            "EA": { lat: 40.4, lon: -3.7 },
+            "EA8": { lat: 28.3, lon: -16.5 },
+            "G": { lat: 52.3, lon: -1.5 },
+            "I": { lat: 42.5, lon: 12.5 },
+            "PA": { lat: 52.1, lon: 5.3 },
+            "LX": { lat: 49.8, lon: 6.1 },
+            "OE": { lat: 47.5, lon: 14.5 },
+            "OK": { lat: 49.8, lon: 15.5 },
+            "OM": { lat: 48.7, lon: 19.5 },
+            "SP": { lat: 52.0, lon: 19.0 },
+            "SM": { lat: 60.1, lon: 18.6 },
+            "OH": { lat: 61.9, lon: 25.7 },
+            "UA": { lat: 55.7, lon: 37.6 },
+            "JA": { lat: 36.2, lon: 138.2 },
+            "K": { lat: 39.8, lon: -98.6 },
+            "W": { lat: 39.8, lon: -98.6 },
+            "N": { lat: 39.8, lon: -98.6 },
+            "VE": { lat: 56.1, lon: -106.3 }
+        };
+
+        function getDXCCPosition(call) {
+            call = call.toUpperCase();
+
+            // préfixes longs d'abord
+            for (let p of ["EA8", "KH6", "KL7"]) {
+                if (call.startsWith(p)) return dxccPositions[p];
+            }
+
+            // préfixes courts
+            for (let p in dxccPositions) {
+                if (call.startsWith(p)) return dxccPositions[p];
+            }
+
+            return null;
+        }
+
+        // --- Lecture ADIF ---
         function parseADIF(text) {
             const qsos = [];
             const records = text.split(/<eor>/i);
@@ -158,6 +198,7 @@
             return qsos;
         }
 
+        // --- Bouton principal ---
         document.getElementById("analyzeBtn").onclick = async () => {
             const file = document.getElementById("adifFile").files[0];
             const band = document.getElementById("bandSelect").value;
@@ -193,20 +234,27 @@
                 }
             });
 
-            // Affichage QSO
+            // --- Affichage des QSO ---
             qsos.forEach(q => {
                 let pos = null;
 
+                // 1) Si le QSO a un locator → position exacte
                 if (q.grid) {
                     pos = locatorToLatLon(q.grid);
                 }
 
+                // 2) Sinon → fallback DXCC
+                if (!pos) {
+                    pos = getDXCCPosition(q.call);
+                }
+
+                // 3) Sinon → locator par défaut
                 if (!pos) {
                     pos = defaultPos;
                 }
 
                 L.marker([pos.lat, pos.lon]).addTo(map)
-                    .bindPopup(`<b>${q.call}</b><br>Bande : ${q.band}<br>Locator : ${q.grid || defaultLocator}`);
+                    .bindPopup(`<b>${q.call}</b><br>Bande : ${q.band}<br>Locator : ${q.grid || "DXCC / défaut"}`);
             });
         };
     </script>
