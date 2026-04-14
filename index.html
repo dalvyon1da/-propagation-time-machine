@@ -117,7 +117,6 @@
             maxZoom: 18
         }).addTo(map);
 
-        // Conversion locator Maidenhead → lat/lon
         function locatorToLatLon(locator) {
             locator = locator.toUpperCase().trim();
             if (locator.length < 4) return null;
@@ -135,7 +134,6 @@
             return { lat, lon };
         }
 
-        // Base DXCC simplifiée
         const dxccPositions = {
             "ON": { lat: 50.8, lon: 4.4 },
             "F": { lat: 46.5, lon: 2.5 },
@@ -166,11 +164,11 @@
             return null;
         }
 
-        // 🔥 PARSEUR ADIF ULTIME — LIT 100 % DES QSO N1MM
+        // 🔥 PARSEUR ULTIME — LIT 100 % DES QSO N1MM
         function parseADIF(text) {
             const qsos = [];
 
-            // Capture chaque QSO : <CALL ...> ... <EOR>
+            // N1MM met tout sur une seule ligne → on capture chaque bloc CALL...EOR
             const regex = /<call[^>]*>\s*([^<\s]+)[\s\S]*?<eor>/gi;
 
             let match;
@@ -215,7 +213,6 @@
             const text = await file.text();
             let qsos = parseADIF(text);
 
-            // Debug : combien de QSO trouvés ?
             alert("QSO détectés : " + qsos.length);
 
             if (bandFilter) {
