@@ -164,20 +164,32 @@
             return null;
         }
 
-        // 🔥 PARSEUR ULTIME — LIT 100 % DES QSO N1MM
+        // 🔥 PARSEUR ULTIME — BASÉ UNIQUEMENT SUR <CALL>
         function parseADIF(text) {
             const qsos = [];
 
-            // N1MM met tout sur une seule ligne → on capture chaque bloc CALL...EOR
-            const regex = /<call[^>]*>\s*([^<\s]+)[\s\S]*?<eor>/gi;
-
+            // Trouver toutes les positions des <CALL>
+            const regex = /<call[^>]*>\s*([^<\s]+)/gi;
             let match;
-            while ((match = regex.exec(text)) !== null) {
-                const record = match[0];
-                const call = match[1].trim();
+            let positions = [];
 
-                const bandMatch = record.match(/<band[^>]*>\s*([^<\s]+)/i);
-                const gridMatch = record.match(/<gridsquare[^>]*>\s*([^<\s]+)/i);
+            while ((match = regex.exec(text)) !== null) {
+                positions.push({ index: match.index, call: match[1].trim() });
+            }
+
+            // Ajouter une position finale
+            positions.push({ index: text.length, call: null });
+
+            // Découper QSO par QSO
+            for (let i = 0; i < positions.length - 1; i++) {
+                const start = positions[i].index;
+                const end = positions[i + 1].index;
+                const block = text.slice(start, end);
+
+                const call = positions[i].call;
+
+                const bandMatch = block.match(/<band[^>]*>\s*([^<\s]+)/i);
+                const gridMatch = block.match(/<gridsquare[^>]*>\s*([^<\s]+)/i);
 
                 qsos.push({
                     call: call,
