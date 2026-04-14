@@ -72,6 +72,12 @@
             border: 1px solid #333;
         }
 
+        #noaaBox h3 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            color: #4da3ff;
+        }
+
         #map {
             flex: 1;
             height: 100%;
@@ -133,7 +139,7 @@
         // Lecture ADIF simple
         function parseADIF(text) {
             const qsos = [];
-            const records = text.split('<eor>');
+            const records = text.split(/<eor>/i);
             records.forEach(r => {
                 const call = r.match(/<call:\d+>([^<]+)/i);
                 const band = r.match(/<band:\d+>([^<]+)/i);
@@ -152,22 +158,42 @@
             return qsos;
         }
 
-        // NOAA API
-        async function loadNOAA(date) {
-            const url = `https://services.swpc.noaa.gov/json/solar-cycle/observed-solar-cycle-indices.json`;
-            const res = await fetch(url);
-            const data = await res.json();
+        // NOAA API journalière + fallback automatique
+        async function loadNOAADaily(date) {
+            const yyyy = date.slice(0, 4);
+            const mm = date.slice(5, 7);
+            const dd = date.slice(8, 10);
 
-            const entry = data.find(d => d.time_tag.startsWith(date.slice(0, 7)));
+            const url = 'https://services.swpc.noaa.gov/json/solar_indices/synoptic.json';
 
-            if (!entry) return null;
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
 
-            return {
-                sfi: entry.solar_flux,
-                ssn: entry.ssn,
-                kp: entry.kp,
-                ap: entry.ap
-            };
+                // Cherche la date exacte
+                let entry = data.find(d => d.time_tag.startsWith(`${yyyy}-${mm}-${dd}`));
+
+                // Si pas trouvé → fallback sur le mois
+                if (!entry) {
+                    entry = data.find(d => d.time_tag.startsWith(`${yyyy}-${mm}`));
+                }
+
+                // Si toujours pas trouvé → fallback sur la dernière valeur dispo
+                if (!entry) {
+                    entry = data[data.length - 1];
+                }
+
+                return {
+                    sfi: entry.solar_flux,
+                    ssn: entry.ssn,
+                    kp: entry.kp,
+                    ap: entry.ap
+                };
+
+            } catch (err) {
+                console.error("Erreur NOAA :", err);
+                return null;
+            }
         }
 
         // Analyse
@@ -188,17 +214,27 @@
                 qsos = qsos.filter(q => q.band === band);
             }
 
+            // Nettoyage des anciens marqueurs (simple : on recrée la carte)
+            map.eachLayer(layer => {
+                if (layer instanceof L.Marker) {
+                    map.removeLayer(layer);
+                }
+            });
+
             // Affichage QSO
             qsos.forEach(q => {
                 L.marker([q.lat, q.lon]).addTo(map)
                     .bindPopup(`<b>${q.call}</b><br>Bande : ${q.band}`);
             });
 
-            // NOAA
-            const noaa = await loadNOAA(date);
+            // NOAA journalière
+            const noaa = await loadNOAADaily(date);
             if (noaa) {
                 document.getElementById("noaaData").innerHTML =
-                    `SFI : ${noaa.sfi}<br>SSN : ${noaa.ssn}<br>Kp : ${noaa.kp}<br>A-index : ${noaa.ap}`;
+                    `SFI : ${noaa.sfi}<br>` +
+                    `SSN : ${noaa.ssn}<br>` +
+                    `Kp : ${noaa.kp}<br>` +
+                    `A-index : ${noaa.ap}`;
             } else {
                 document.getElementById("noaaData").innerHTML = "Aucune donnée NOAA trouvée.";
             }
