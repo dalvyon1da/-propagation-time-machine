@@ -135,7 +135,7 @@
             return { lat, lon };
         }
 
-        // --- Base DXCC simplifiée (fallback pays) ---
+        // --- Base DXCC simplifiée ---
         const dxccPositions = {
             "ON": { lat: 50.8, lon: 4.4 },
             "F": { lat: 46.5, lon: 2.5 },
@@ -176,21 +176,21 @@
             return null;
         }
 
-        // --- Lecture ADIF ---
+        // --- Lecture ADIF robuste ---
         function parseADIF(text) {
             const qsos = [];
             const records = text.split(/<eor>/i);
 
             records.forEach(r => {
-                const call = r.match(/<call:\d+>([^<]+)/i);
-                const band = r.match(/<band:\d+>([^<]+)/i);
-                const grid = r.match(/<gridsquare:\d+>([^<]+)/i);
+                const call = r.match(/<call(:\d+)?(:\w+)?>\s*([^<\s]+)/i);
+                const band = r.match(/<band(:\d+)?(:\w+)?>\s*([^<\s]+)/i);
+                const grid = r.match(/<gridsquare(:\d+)?(:\w+)?>\s*([^<\s]+)/i);
 
                 if (call) {
                     qsos.push({
-                        call: call[1],
-                        band: band ? band[1] : "",
-                        grid: grid ? grid[1] : null
+                        call: call[3],
+                        band: band ? band[3] : "",
+                        grid: grid ? grid[3] : null
                     });
                 }
             });
@@ -238,20 +238,9 @@
             qsos.forEach(q => {
                 let pos = null;
 
-                // 1) Si le QSO a un locator → position exacte
-                if (q.grid) {
-                    pos = locatorToLatLon(q.grid);
-                }
-
-                // 2) Sinon → fallback DXCC
-                if (!pos) {
-                    pos = getDXCCPosition(q.call);
-                }
-
-                // 3) Sinon → locator par défaut
-                if (!pos) {
-                    pos = defaultPos;
-                }
+                if (q.grid) pos = locatorToLatLon(q.grid);
+                if (!pos) pos = getDXCCPosition(q.call);
+                if (!pos) pos = defaultPos;
 
                 L.marker([pos.lat, pos.lon]).addTo(map)
                     .bindPopup(`<b>${q.call}</b><br>Bande : ${q.band}<br>Locator : ${q.grid || "DXCC / défaut"}`);
