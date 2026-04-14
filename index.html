@@ -102,9 +102,11 @@ function parseADIF(text) {
 document.getElementById("analyzeBtn").onclick = async () => {
     const file = document.getElementById("adifFile").files[0];
     const bandFilter = document.getElementById("bandSelect").value.toUpperCase();
-    const defaultLocator = document.getElementById("defaultLocator").value.trim();
+    let defaultLocator = document.getElementById("defaultLocator").value.trim();
 
-    const defaultPos = locatorToLatLon(defaultLocator);
+    if (!defaultLocator) defaultLocator = "JO20HQ"; // 🔥 sécurité
+    let defaultPos = locatorToLatLon(defaultLocator);
+
     const text = await file.text();
     let qsos = parseADIF(text);
 
@@ -120,7 +122,7 @@ document.getElementById("analyzeBtn").onclick = async () => {
 
         if (q.grid) pos = locatorToLatLon(q.grid);
         if (!pos) pos = getDXCCPosition(q.call);
-        if (!pos) pos = defaultPos; // 🔥 Fallback sûr
+        if (!pos) pos = defaultPos; // 🔥 aucun QSO perdu
 
         markers.addLayer(
             L.marker([pos.lat, pos.lon]).bindPopup(
