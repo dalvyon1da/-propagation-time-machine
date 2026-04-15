@@ -1,104 +1,209 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <title>Test ADIF brut</title>
-
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-
-    <style>
-        body { margin:0; font-family:Arial; background:#1e1e1e; color:#e0e0e0; display:flex; height:100vh; }
-        #sidebar { width:350px; background:#111; padding:20px; overflow:auto; }
-        #map { flex:1; }
-        table { width:100%; border-collapse:collapse; font-size:12px; }
-        th, td { border:1px solid #444; padding:3px 5px; }
-        input, button { width:100%; padding:8px; margin:5px 0; background:#222; border:1px solid #444; color:#fff; }
-        button { cursor:pointer; background:#007bff; }
-        button:hover { background:#0a84ff; }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Carte QSO avec locator dynamique</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #1e1e1e;
+      color: #e0e0e0;
+      display: flex;
+      height: 100vh;
+    }
+    #sidebar {
+      width: 350px;
+      background: #111;
+      padding: 20px;
+      overflow: auto;
+      box-sizing: border-box;
+    }
+    #map {
+      flex: 1;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+    th,
+    td {
+      border: 1px solid #444;
+      padding: 3px 5px;
+      text-align: left;
+    }
+    input,
+    button,
+    select {
+      width: 100%;
+      padding: 8px;
+      margin: 5px 0;
+      background: #222;
+      border: 1px solid #444;
+      color: #fff;
+      box-sizing: border-box;
+    }
+    button {
+      cursor: pointer;
+      background: #007bff;
+    }
+    button:hover {
+      background: #0a84ff;
+    }
+  </style>
 </head>
 <body>
+  <div id="sidebar">
+    <h2>Visualisation QSO ADIF</h2>
 
-<div id="sidebar">
-    <h2>Test ADIF brut</h2>
+    <label for="locatorInput">Entrer votre locator (ex: JO20HQ) :</label>
+    <input
+      type="text"
+      id="locatorInput"
+      placeholder="JO20HQ"
+      value="JO20HQ"
+      maxlength="6"
+    />
 
-    <input type="file" id="adifFile" accept=".adi,.adif">
-    <button id="analyzeBtn">Analyser</button>
+    <input type="file" id="adifFile" accept=".adi,.adif" />
+    <button id="analyzeBtn">Analyser et afficher</button>
+    <button id="toggleTable">Afficher/Masquer liste QSO</button>
 
     <p id="info"></p>
 
     <table id="qsoTable">
-        <thead>
-            <tr><th>#</th><th>CALL</th><th>BAND</th></tr>
-        </thead>
-        <tbody></tbody>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>CALL</th>
+          <th>BAND</th>
+          <th>DATE</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
     </table>
-</div>
+  </div>
 
-<div id="map"></div>
+  <div id="map"></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-const map = L.map('map').setView([50.8, 4.4], 4);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map("map").setView([50.8, 4.4], 4);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
 
-// Conversion locator
-function locatorToLatLon(locator) {
-    locator = locator.toUpperCase().trim();
-    if (locator.length < 4) return null;
-    const A = 'A'.charCodeAt(0);
-    const lon = (locator.charCodeAt(0)-A)*20 -180 + parseInt(locator[2])*2;
-    const lat = (locator.charCodeAt(1)-A)*10 -90 + parseInt(locator[3]);
-    return { lat, lon };
-}
-
-// Parseur basé sur <CALL>
-function parseADIF(text) {
-    const qsos = [];
-    const regex = /<call[^>]*>\s*([^<\s]+)/gi;
-    let match, positions = [];
-
-    while ((match = regex.exec(text)) !== null)
-        positions.push({ index: match.index, call: match[1].trim() });
-
-    positions.push({ index: text.length });
-
-    for (let i=0; i<positions.length-1; i++) {
-        const block = text.slice(positions[i].index, positions[i+1].index);
-        const call = positions[i].call;
-        const band = (block.match(/<band[^>]*>\s*([^<\s]+)/i) || [,""])[1];
-        qsos.push({ call, band });
+    // Conversion locator Maidenhead en latitude/longitude
+    function locatorToLatLon(locator) {
+      locator = locator.toUpperCase().trim();
+      if (locator.length < 4) return null;
+      const A = "A".charCodeAt(0);
+      // Calcul simple pour 4 caractères (precision ~10km)
+      const lon =
+        (locator.charCodeAt(0) - A) * 20 - 180 + parseInt(locator[2], 10) * 2;
+      const lat =
+        (locator.charCodeAt(1) - A) * 10 - 90 + parseInt(locator[3], 10) * 1;
+      return { lat, lon };
     }
-    return qsos;
-}
 
-document.getElementById("analyzeBtn").onclick = async () => {
-    const file = document.getElementById("adifFile").files[0];
-    if (!file) { alert("Choisis un fichier ADIF"); return; }
+    // Parseur complet qui récupère tous les QSOs
+    function parseADIF(text) {
+      const qsos = [];
+      // Sépare par <EOR> (fin d'enregistrement)
+      const records = text.split(/<EOR>/i);
+      for (let rec of records) {
+        const callMatch = rec.match(/<CALL:\d+>\s*([^<\s]+)/i);
+        const bandMatch = rec.match(/<BAND:\d+>\s*([^<\s]+)/i);
+        const dateMatch = rec.match(/<QSO_DATE:\d+>\s*(\d{8})/i);
 
-    const text = await file.text();
-    const qsos = parseADIF(text);
+        if (callMatch) {
+          const call = callMatch[1].trim();
+          const band = bandMatch ? bandMatch[1].trim() : "N/A";
+          const date = dateMatch ? dateMatch[1].trim() : "N/A";
+          qsos.push({ call, band, date });
+        }
+      }
+      return qsos;
+    }
 
-    document.getElementById("info").textContent = `QSO détectés : ${qsos.length}`;
-
+    const infoElem = document.getElementById("info");
     const tbody = document.querySelector("#qsoTable tbody");
-    tbody.innerHTML = "";
-    qsos.forEach((q, i) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${i+1}</td><td>${q.call}</td><td>${q.band}</td>`;
-        tbody.appendChild(tr);
-    });
+    const table = document.getElementById("qsoTable");
+    const toggleTableBtn = document.getElementById("toggleTable");
 
-    // Position JO20HQ forcée
-    const pos = locatorToLatLon("JO20HQ");
+    toggleTableBtn.onclick = () => {
+      if (table.style.display === "none") {
+        table.style.display = "table";
+        toggleTableBtn.textContent = "Masquer liste QSO";
+      } else {
+        table.style.display = "none";
+        toggleTableBtn.textContent = "Afficher liste QSO";
+      }
+    };
 
-    map.eachLayer(l => { if (l instanceof L.Marker) map.removeLayer(l); });
+    document
+      .getElementById("analyzeBtn")
+      .addEventListener("click", async () => {
+        const locator = document.getElementById("locatorInput").value.trim();
+        if (!locator || locator.length < 4) {
+          alert("Merci d'entrer un locator valide (ex: JO20HQ)");
+          return;
+        }
 
-    qsos.forEach(() => {
-        L.circleMarker([pos.lat, pos.lon], { radius:3, color:"red" }).addTo(map);
-    });
-};
-</script>
+        const fileInput = document.getElementById("adifFile");
+        if (!fileInput.files.length) {
+          alert("Merci de sélectionner un fichier ADIF.");
+          return;
+        }
 
+        const file = fileInput.files[0];
+        const text = await file.text();
+        const qsos = parseADIF(text);
+
+        infoElem.textContent = `QSO détectés : ${qsos.length}`;
+
+        // Remplissage du tableau
+        tbody.innerHTML = "";
+        qsos.forEach((qso, idx) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${idx + 1}</td><td>${qso.call}</td><td>${qso.band}</td><td>${qso.date}</td>`;
+          tbody.appendChild(tr);
+        });
+
+        // Nettoyage des marqueurs précédents
+        map.eachLayer((layer) => {
+          if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
+            map.removeLayer(layer);
+          }
+        });
+
+        // Converter locator en coordonnées
+        const centerPos = locatorToLatLon(locator);
+        if (!centerPos) {
+          alert("Le locator entré est invalide.");
+          return;
+        }
+
+        // Ajoute un marqueur par QSO à la position du locator saisi
+        qsos.forEach((qso) => {
+          L.circleMarker([centerPos.lat, centerPos.lon], {
+            radius: 5,
+            color: "red",
+            fillOpacity: 0.7,
+          })
+            .bindPopup(
+              `<b>Call:</b> ${qso.call}<br/><b>Bande:</b> ${qso.band}<br/><b>Date:</b> ${qso.date}`
+            )
+            .addTo(map);
+        });
+
+        // Centre et zoom carte sur locator
+        map.setView([centerPos.lat, centerPos.lon], 6);
+      });
+  </script>
 </body>
 </html>
