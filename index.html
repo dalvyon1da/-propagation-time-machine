@@ -8,25 +8,50 @@
   body { margin:0; font-family: Arial, sans-serif; background: #1e1e1e; color: #e0e0e0; display: flex; height: 100vh; }
   #sidebar { width: 350px; background: #111; padding: 20px; box-sizing: border-box; overflow: auto; }
   #map { flex: 1; }
-  input, button { width: 100%; padding: 8px; margin: 5px 0; background: #222; border: 1px solid #444; color: #fff; box-sizing: border-box; }
-  button { cursor: pointer; background: #007bff; border-radius: 4px; }
+  input, button, select { width: 100%; padding: 8px; margin: 5px 0; background: #222; border: 1px solid #444; color: #fff; box-sizing: border-box; }
+  button, select { cursor: pointer; border-radius: 4px; }
+  button { background: #007bff; }
   button:hover { background: #0a84ff; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
-  th, td { border: 1px solid #444; padding: 5px 8px; text-align: left; }
+  select { background: #222; }
   .progress-container { display: none; width: 100%; background: #222; border-radius: 8px; margin: 10px 0; }
   .progress-bar { height: 20px; background: #4caf50; width: 0%; border-radius: 8px; text-align: center; color: #000; line-height: 20px; font-weight: bold; }
   #info { margin-top: 5px; color: #bbb; font-size: 13px; }
+  /* Masque le tableau complètement */
+  #qsoTable { display:none; }
 </style>
 </head>
 <body>
 <div id="sidebar">
-  <h2>QSO ADIF et carte spothole.app</h2>
+  <h2>QSO ADIF / Carte spothole.app</h2>
   <input type="file" id="adifFile" accept=".adi,.adif" />
   <button id="analyzeBtn">Analyser et afficher</button>
+  
+  <select id="bandSelect">
+    <option value="">Toutes bandes</option>
+    <option value="160M">160m</option>
+    <option value="80M">80m</option>
+    <option value="60M">60m</option>
+    <option value="40M">40m</option>
+    <option value="30M">30m</option>
+    <option value="20M">20m</option>
+    <option value="17M">17m</option>
+    <option value="15M">15m</option>
+    <option value="12M">12m</option>
+    <option value="10M">10m</option>
+    <option value="6M">6m</option>
+    <option value="4M">4m</option>
+    <option value="2M">2m</option>
+    <option value="70CM">70cm</option>
+    <option value="VHF">VHF</option>
+    <option value="UHF">UHF</option>
+  </select>
+
   <div class="progress-container" id="progressContainer">
     <div class="progress-bar" id="progressBar">0%</div>
   </div>
+
   <p id="info"></p>
+
   <table id="qsoTable">
     <thead><tr><th>#</th><th>Callsign</th><th>Bande</th><th>Date</th><th>Locator</th></tr></thead>
     <tbody></tbody>
@@ -36,7 +61,6 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  // --- Initialisation carte OSM (PAS Stamen)
   const map = L.map('map').setView([50.8,4.4],4);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18,
@@ -45,10 +69,23 @@
 
   const adifFile = document.getElementById('adifFile');
   const analyzeBtn = document.getElementById('analyzeBtn');
+  const bandSelect = document.getElementById('bandSelect');
   const info = document.getElementById('info');
-  const tbody = document.querySelector('#qsoTable tbody');
   const progressContainer = document.getElementById('progressContainer');
   const progressBar = document.getElementById('progressBar');
+
+  // Conserve tous les QSO avec leurs infos + lat/lon
+  let allQSOs = [];
+  let markersLayer = L.layerGroup().addTo(map);
+
+  function locatorToLatLon(locator){
+    if(!locator || locator.length < 4) return null;
+    locator = locator.toUpperCase();
+    const A = 'A'.charCodeAt(0);
+    const lon = (locator.charCodeAt(0) - A)*20 - 180 + parseInt(locator[2],10)*2 + 1;
+    const lat = (locator.charCodeAt(1) - A)*10 - 90 + parseInt(locator[3],10) + 0.5;
+    return {lat, lon};
+  }
 
   function parseADIF(text) {
     const qsos = [];
@@ -60,7 +97,7 @@
       const dateMatch = rec.match(/<QSO_DATE:\s*\d+>\s*(\d{8})/i);
       qsos.push({
         call: callMatch[1].trim().toUpperCase(),
-        band: bandMatch ? bandMatch[1].trim() : 'N/A',
+        band: bandMatch ? bandMatch[1].trim().toUpperCase() : 'N/A',
         date: dateMatch ? dateMatch[1].trim() : 'N/A'
       });
     }
@@ -92,19 +129,46 @@
       }
       return null;
     } catch(e) {
-      console.error('Erreur récupération coordonnees grid', e);
+      console.error('Erreur récupération coordonnées grid', e);
       return null;
     }
   }
 
-  function locatorToLatLon(locator){
-    if(!locator || locator.length < 4) return null;
-    locator = locator.toUpperCase();
-    const A = 'A'.charCodeAt(0);
-    const lon = (locator.charCodeAt(0) - A)*20 - 180 + parseInt(locator[2],10)*2 + 1;
-    const lat = (locator.charCodeAt(1) - A)*10 - 90 + parseInt(locator[3],10) + 0.5;
-    return {lat, lon};
+  // Affiche les QSOs (filtrage si bande != "")
+  function displayMarkers(filteredQSOs){
+    markersLayer.clearLayers();
+    let localizedCount = 0;
+    for(const qso of filteredQSOs){
+      if(qso.pos){
+        localizedCount++;
+        L.circleMarker([qso.pos.lat, qso.pos.lon], {
+          radius: 6,
+          color: 'green',
+          fillOpacity: 0.8
+        }).addTo(markersLayer).bindPopup(`<b>Call:</b> ${qso.call}<br/><b>Bande:</b> ${qso.band}<br/><b>Date:</b> ${qso.date}<br/><b>Locator:</b> ${qso.locator}`);
+      }
+    }
+    info.textContent = `QSO affichés : ${filteredQSOs.length} — QSO géolocalisés : ${localizedCount}`;
+    // Centre sur le premier marker affiché
+    const first = filteredQSOs.find(q => q.pos);
+    if(first && first.pos) map.setView([first.pos.lat, first.pos.lon], 6);
   }
+
+  bandSelect.addEventListener('change', () => {
+    if(!allQSOs.length) return;
+    const band = bandSelect.value;
+    let filter;
+    if(!band) {
+      filter = allQSOs;
+    } else if (band === "VHF") {
+      filter = allQSOs.filter(q => ["2M", "4M", "6M"].includes(q.band));
+    } else if (band === "UHF") {
+      filter = allQSOs.filter(q => ["70CM"].includes(q.band));
+    } else {
+      filter = allQSOs.filter(q => q.band === band);
+    }
+    displayMarkers(filter);
+  });
 
   analyzeBtn.addEventListener('click', async () => {
     if(!adifFile.files.length){
@@ -112,25 +176,18 @@
       return;
     }
     info.textContent = "";
-    tbody.innerHTML = "";
     progressContainer.style.display = "block";
     progressBar.style.width = "0%";
     progressBar.textContent = "0%";
 
-    map.eachLayer(layer => {
-      if (layer !== map._layersMinZoom && layer !== map._layersMaxZoom) {
-        if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
-          map.removeLayer(layer);
-        }
-      }
-    });
+    // Efface tous markers/couches préc.
+    markersLayer.clearLayers();
+    map.setView([50.8,4.4],4);
 
     const text = await adifFile.files[0].text();
     const qsos = parseADIF(text);
-    info.textContent = `QSO détectés : ${qsos.length}`;
 
-    let localizedCount = 0;
-
+    allQSOs = [];
     for(let i=0; i<qsos.length; i++){
       const qso = qsos[i];
       const spotData = await getSpotHoleData(qso.call);
@@ -150,17 +207,8 @@
           pos = locatorToLatLon(locator);
         }
       }
-      if(pos){
-        localizedCount++;
-        L.circleMarker([pos.lat, pos.lon], {
-          radius: 6,
-          color: 'green',
-          fillOpacity: 0.8
-        }).addTo(map).bindPopup(`<b>Call:</b> ${qso.call}<br/><b>Bande:</b> ${qso.band}<br/><b>Date:</b> ${qso.date}<br/><b>Locator:</b> ${qso.locator}`);
-      }
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${i+1}</td><td>${qso.call}</td><td>${qso.band}</td><td>${qso.date}</td><td>${qso.locator}</td>`;
-      tbody.appendChild(tr);
+      qso.pos = pos || null;
+      allQSOs.push(qso);
 
       const percent = Math.round((100*(i+1))/qsos.length);
       progressBar.style.width = percent + '%';
@@ -168,21 +216,11 @@
 
       await new Promise(r => setTimeout(r, 250));
     }
-
     progressContainer.style.display = 'none';
 
-    const firstValid = qsos.find(q => q.locator !== "Inconnu");
-    if(firstValid){
-      let centerPos = null;
-      if(firstValid.dx_latitude != null && firstValid.dx_longitude != null)
-        centerPos = {lat: firstValid.dx_latitude, lon: firstValid.dx_longitude};
-      else if(firstValid.locator)
-        centerPos = locatorToLatLon(firstValid.locator);
-      if(centerPos) map.setView([centerPos.lat, centerPos.lon], 6);
-    }
-
-    info.textContent = `QSO détectés : ${qsos.length} — QSO géolocalisés : ${localizedCount}`;
+    // Affichage initial selon le menu (toutes bandes ou spécifique)
+    bandSelect.dispatchEvent(new Event('change'));
   });
 </script>
 </body>
-</html>
+</html
