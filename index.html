@@ -2,69 +2,32 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>Visualisation QSO avec spothole.app API</title>
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
+  <title>Visualisation QSO ADIF & Progression</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #1e1e1e;
-      color: #e0e0e0;
-      display: flex;
-      height: 100vh;
-    }
-    #sidebar {
-      width: 350px;
-      background: #111;
-      padding: 20px;
-      overflow: auto;
-      box-sizing: border-box;
-    }
-    #map {
-      flex: 1;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-      margin-top: 10px;
-    }
-    th,
-    td {
-      border: 1px solid #444;
-      padding: 3px 5px;
-      text-align: left;
-    }
-    input,
-    button {
-      width: 100%;
-      padding: 8px;
-      margin: 5px 0;
-      background: #222;
-      border: 1px solid #444;
-      color: #fff;
-      box-sizing: border-box;
-    }
-    button {
-      cursor: pointer;
-      background: #007bff;
-    }
-    button:hover {
-      background: #0a84ff;
-    }
+    body { margin:0; font-family: Arial, sans-serif; background: #1e1e1e; color: #e0e0e0; display:flex; height:100vh; }
+    #sidebar { width:350px; background:#111; padding:20px; overflow:auto; box-sizing:border-box; }
+    #map { flex:1; }
+    table { width:100%; border-collapse:collapse; font-size:12px; margin-top:10px; }
+    th, td { border:1px solid #444; padding:3px 5px; text-align:left; }
+    input, button { width:100%; padding:8px; margin:5px 0; background:#222; border:1px solid #444; color:#fff; box-sizing:border-box; }
+    button { cursor:pointer; background:#007bff; }
+    button:hover { background:#0a84ff; }
+    .progress-container { width:100%; background:#333; border-radius:8px; margin-top:8px; margin-bottom:8px; display:none; }
+    .progress-bar { height:20px; background:#4caf50; border-radius:8px; width:0%; text-align:center; color:#fff; line-height:20px; font-size:12px; }
   </style>
 </head>
 <body>
   <div id="sidebar">
-    <h2>Visualisation QSO avec spothole.app</h2>
+    <h2>Visualisation QSO ADIF</h2>
 
     <input type="file" id="adifFile" accept=".adi,.adif" />
-
     <button id="analyzeBtn">Analyser et afficher</button>
-    <button id="toggleTable">Masquer liste QSO</button>
+    <button id="toggleTable">Masquer la liste QSO</button>
+
+    <div class="progress-container" id="progressContainer">
+      <div class="progress-bar" id="progressBar">0%</div>
+    </div>
 
     <p id="info"></p>
 
@@ -90,19 +53,24 @@
     const tbody = document.querySelector("#qsoTable tbody");
     const table = document.getElementById("qsoTable");
     const toggleTableBtn = document.getElementById("toggleTable");
+    const progressContainer = document.getElementById("progressContainer");
+    const progressBar = document.getElementById("progressBar");
 
     toggleTableBtn.onclick = () => {
       if (table.style.display === "none") {
         table.style.display = "table";
-        toggleTableBtn.textContent = "Masquer liste QSO";
+        toggleTableBtn.textContent = "Masquer la liste QSO";
       } else {
         table.style.display = "none";
-        toggleTableBtn.textContent = "Afficher liste QSO";
+        toggleTableBtn.textContent = "Afficher la liste QSO";
       }
     };
 
     const map = L.map("map").setView([50.8, 4.4], 4);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+    L.tileLayer("https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}.jpg", {
+      maxZoom: 18,
+      attribution: 'Map tiles &copy; Stamen | Data &copy; OpenStreetMap'
+    }).addTo(map);
 
     function locatorToLatLon(locator) {
       locator = locator.toUpperCase().trim();
@@ -125,7 +93,7 @@
           qsos.push({
             call: callMatch[1].trim(),
             band: bandMatch ? bandMatch[1].trim() : "N/A",
-            date: dateMatch ? dateMatch[1].trim() : "N/A",
+            date: dateMatch ? dateMatch[1].trim() : "N/A"
           });
         }
       }
@@ -147,13 +115,19 @@
     }
 
     async function afficherQSOsAvecSpotholeAPI(qsos) {
-      map.eachLayer((layer) => {
+      map.eachLayer(layer => {
         if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
           map.removeLayer(layer);
         }
       });
 
       tbody.innerHTML = "";
+
+      progressContainer.style.display = "block";
+      progressBar.style.width = "0%";
+      progressBar.textContent = "0%";
+
+      let foundCount = 0;
 
       for (let i = 0; i < qsos.length; i++) {
         const qso = qsos[i];
@@ -172,6 +146,7 @@
         tbody.appendChild(tr);
 
         if (pos) {
+          foundCount++;
           L.circleMarker([pos.lat, pos.lon], {
             radius: 6,
             color: "green",
@@ -183,17 +158,29 @@
             .addTo(map);
         }
 
-        // Pause pour limiter requêtes simultanées
+        // Mise à jour barre progression
+        const percent = Math.round(((i + 1) / qsos.length) * 100);
+        progressBar.style.width = percent + "%";
+        progressBar.textContent = percent + "%";
+
+        // Pause pour limiter les requêtes simultanées
         await new Promise((r) => setTimeout(r, 250));
       }
 
-      const first = qsos.find((q) => q.locator !== "Inconnu");
+      // Masquer la barre de progression à la fin
+      setTimeout(() => {
+        progressContainer.style.display = "none";
+      }, 500);
+
+      const first = qsos.find(q => q.locator !== "Inconnu");
       if (first) {
         const centerPos = locatorToLatLon(first.locator);
         if (centerPos) {
           map.setView([centerPos.lat, centerPos.lon], 6);
         }
       }
+
+      infoElem.textContent = `QSO détectés : ${qsos.length} — QSO géolocalisés : ${foundCount}`;
     }
 
     document.getElementById("analyzeBtn").addEventListener("click", async () => {
@@ -202,18 +189,16 @@
         alert("Sélectionne un fichier ADIF.");
         return;
       }
-
       try {
+        infoElem.textContent = "";
+        progressBar.style.width = "0%";
+        progressBar.textContent = "0%";
         const text = await fileInput.files[0].text();
         const qsos = parseADIF(text);
-
         infoElem.textContent = `QSO détectés : ${qsos.length}`;
-
         await afficherQSOsAvecSpotholeAPI(qsos);
       } catch (error) {
-        alert(
-          "Erreur lors du traitement du fichier ou de la récupération des données."
-        );
+        infoElem.textContent = "Erreur lors du traitement ou de la récupération des données.";
         console.error(error);
       }
     });
