@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<title>QSO ADIF & spothole.app carte avec locator personnel</title>
+<title>QSO ADIF & spothole.app carte</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
   body { margin:0; font-family: Arial, sans-serif; background: #1e1e1e; color: #e0e0e0; display: flex; height: 100vh; }
@@ -28,10 +28,6 @@
   <h2>QSO ADIF / Carte spothole.app</h2>
   <input type="file" id="adifFile" accept=".adi,.adif" />
   <button id="analyzeBtn">Analyser et afficher</button>
-
-  <!-- Champ pour entrer ton locator perso -->
-  <input type="text" id="starLocatorInput" placeholder="Entrer un locator (ex: JO20DJ)" maxlength="6" />
-  <button id="showLocatorBtn">Afficher mon locator sur la carte</button>
   
   <select id="bandSelect">
     <option value="">Toutes bandes</option>
@@ -58,6 +54,11 @@
   </div>
 
   <p id="info"></p>
+
+  <table id="qsoTable">
+    <thead><tr><th>#</th><th>Callsign</th><th>Bande</th><th>Date</th><th>Locator</th></tr></thead>
+    <tbody></tbody>
+  </table>
   
   <div class="legend">
     <b>Couleur par bande :</b><br>
@@ -79,208 +80,189 @@
     <span style="background:#A52A2A"></span>UHF
   </div>
 </div>
-<div id="map" style="height:100vh;"></div>
+<div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-function getBandColor(band) {
-  const mapColor = {
-    "160M": "#800080",
-    "80M": "#0000CD",
-    "60M": "#00CED1",
-    "40M": "#228B22",
-    "30M": "#8B4513",
-    "20M": "#FFD700",
-    "17M": "#FF8C00",
-    "15M": "#DC143C",
-    "12M": "#FF1493",
-    "10M": "#00FF00",
-    "6M": "#00FA9A",
-    "4M": "#20B2AA",
-    "2M": "#1E90FF",
-    "70CM": "#FF4500",
-    "VHF": "#00BFFF",
-    "UHF": "#A52A2A"
-  };
-  return mapColor[band] || "#888888";
-}
-
-const map = L.map('map').setView([50.8,4.4],4);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  maxZoom:18, attribution:'© OpenStreetMap contributors'
-}).addTo(map);
-
-const adifFile = document.getElementById('adifFile');
-const analyzeBtn = document.getElementById('analyzeBtn');
-const bandSelect = document.getElementById('bandSelect');
-const info = document.getElementById('info');
-const progressContainer = document.getElementById('progressContainer');
-const progressBar = document.getElementById('progressBar');
-
-const starLocatorInput = document.getElementById('starLocatorInput');
-const showLocatorBtn = document.getElementById('showLocatorBtn');
-
-let allQSOs = [];
-let markersLayer = L.layerGroup().addTo(map);
-let starMarker = null;
-
-function locatorToLatLon(locator){
-  if(!locator || locator.length<4) return null;
-  locator = locator.toUpperCase();
-  const A = 'A'.charCodeAt(0);
-  const lon = (locator.charCodeAt(0) - A)*20 -180 + parseInt(locator[2],10)*2 + 1;
-  const lat = (locator.charCodeAt(1) - A)*10 -90 + parseInt(locator[3],10) + 0.5;
-  return {lat, lon};
-}
-
-function parseADIF(text){
-  const qsos = [];
-  const records = text.split(/<EOR>/i);
-  for(let rec of records){
-    const callM = rec.match(/<CALL:\s*\d+>\s*([^<\s]+)/i);
-    if(!callM)continue;
-    const bandM = rec.match(/<BAND:\s*\d+>\s*([^<\s]+)/i);
-    const dateM = rec.match(/<QSO_DATE:\s*\d+>\s*(\d{8})/i);
-    qsos.push({
-      call: callM[1].trim().toUpperCase(),
-      band: bandM? bandM[1].trim().toUpperCase() : 'N/A',
-      date: dateM? dateM[1].trim() : 'N/A'
-    });
-  }
-  return qsos;
-}
-
-async function getSpotHoleData(callsign){
-  try{
-    const url = `https://spothole.app/api/v1/lookup/call?call=${encodeURIComponent(callsign)}`;
-    const res = await fetch(url);
-    if(!res.ok)throw new Error('HTTP '+res.status);
-    const json = await res.json();
-    return Array.isArray(json)? json[0]||null : json;
-  }catch(e){
-    console.error("Erreur API spothole.app pour "+callsign,e);
-    return null;
-  }
-}
-
-async function getGridCenter(grid){
-  if(!grid) return null;
-  try{
-    const res = await fetch(`https://spothole.app/api/v1/recherche/grille?grille=${encodeURIComponent(grid)}`);
-    if(!res.ok) return null;
-    const json = await res.json();
-    if(json?.center?.latitude!=null && json?.center?.longitude!=null)
-      return {lat: json.center.latitude, lon: json.center.longitude};
-    return null;
-  }catch(e){
-    console.error('Erreur récupération grid center', e);
-    return null;
-  }
-}
-
-function displayMarkers(filteredQSOs){
-  markersLayer.clearLayers();
-  let localizedCount=0;
-  for(const qso of filteredQSOs){
-    if(qso.pos){
-      localizedCount++;
-      L.circleMarker([qso.pos.lat,qso.pos.lon],{
-        radius:6,
-        color:getBandColor(qso.band),
-        fillColor:getBandColor(qso.band),
-        fillOpacity:0.8
-      }).addTo(markersLayer).bindPopup(
-        `<b>Call:</b> ${qso.call}<br/><b>Bande:</b> ${qso.band}<br/><b>Date:</b> ${qso.date}<br/><b>Locator:</b> ${qso.locator}`
-      );
+  function getBandColor(band) {
+    switch(band) {
+      case "160M": return "#800080";   // violet foncé
+      case "80M":  return "#0000CD";   // bleu moyen
+      case "60M":  return "#00CED1";   // turquoise
+      case "40M":  return "#228B22";   // vert
+      case "30M":  return "#8B4513";   // marron
+      case "20M":  return "#FFD700";   // or
+      case "17M":  return "#FF8C00";   // orange foncé
+      case "15M":  return "#DC143C";   // rouge foncé
+      case "12M":  return "#FF1493";   // rose
+      case "10M":  return "#00FF00";   // vert vif
+      case "6M":   return "#00FA9A";   // vert menthe
+      case "4M":   return "#20B2AA";   // bleu-vert
+      case "2M":   return "#1E90FF";   // bleu ciel
+      case "70CM": return "#FF4500";   // orange-rouge
+      case "VHF":  return "#00BFFF";   // bleu
+      case "UHF":  return "#A52A2A";   // brun
+      default:     return "#888888";   // gris
     }
   }
-  info.textContent = `QSO affichés : ${filteredQSOs.length} — QSO géolocalisés : ${localizedCount}`;
-  const first = filteredQSOs.find(q=>q.pos);
-  if(first && first.pos) map.setView([first.pos.lat, first.pos.lon],6);
-}
 
-bandSelect.addEventListener('change', ()=>{
-  if(!allQSOs.length)return;
-  const band = bandSelect.value;
-  let filter;
-  if(!band) filter = allQSOs;
-  else if(band === 'VHF') filter = allQSOs.filter(q=>['2M','4M','6M'].includes(q.band));
-  else if(band === 'UHF') filter = allQSOs.filter(q=>['70CM'].includes(q.band));
-  else filter = allQSOs.filter(q=>q.band===band);
-  displayMarkers(filter);
-});
+  const map = L.map('map').setView([50.8,4.4],4);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
 
-analyzeBtn.addEventListener('click',async()=>{
-  if(!adifFile.files.length){
-    alert("Veuillez sélectionner un fichier ADIF.");
-    return;
+  const adifFile = document.getElementById('adifFile');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const bandSelect = document.getElementById('bandSelect');
+  const info = document.getElementById('info');
+  const progressContainer = document.getElementById('progressContainer');
+  const progressBar = document.getElementById('progressBar');
+  let allQSOs = [];
+  let markersLayer = L.layerGroup().addTo(map);
+
+  function locatorToLatLon(locator){
+    if(!locator || locator.length < 4) return null;
+    locator = locator.toUpperCase();
+    const A = 'A'.charCodeAt(0);
+    const lon = (locator.charCodeAt(0) - A)*20 - 180 + parseInt(locator[2],10)*2 + 1;
+    const lat = (locator.charCodeAt(1) - A)*10 - 90 + parseInt(locator[3],10) + 0.5;
+    return {lat, lon};
   }
-  info.textContent="";
-  progressContainer.style.display="block";
-  progressBar.style.width="0%";
-  progressBar.textContent="0%";
 
-  markersLayer.clearLayers();
-  map.setView([50.8,4.4],4);
-
-  const text = await adifFile.files[0].text();
-  const qsos = parseADIF(text);
-
-  allQSOs = [];
-  for(let i=0;i<qsos.length;i++){
-    const qso = qsos[i];
-    const spotData = await getSpotHoleData(qso.call);
-    let lat=null, lon=null, locator=null;
-    if(spotData){
-      locator = spotData.dx_grid || spotData.grid || null;
-      lat = spotData.dx_latitude!=null ? spotData.dx_latitude : (spotData.latitude!=null?spotData.latitude:null);
-      lon = spotData.dx_longitude!=null ? spotData.dx_longitude : (spotData.longitude!=null?spotData.longitude:null);
+  function parseADIF(text) {
+    const qsos = [];
+    const records = text.split(/<EOR>/i);
+    for(let rec of records) {
+      const callMatch = rec.match(/<CALL:\s*\d+>\s*([^<\s]+)/i);
+      if (!callMatch) continue;
+      const bandMatch = rec.match(/<BAND:\s*\d+>\s*([^<\s]+)/i);
+      const dateMatch = rec.match(/<QSO_DATE:\s*\d+>\s*(\d{8})/i);
+      qsos.push({
+        call: callMatch[1].trim().toUpperCase(),
+        band: bandMatch ? bandMatch[1].trim().toUpperCase() : 'N/A',
+        date: dateMatch ? dateMatch[1].trim() : 'N/A'
+      });
     }
-    qso.locator = locator ? locator.toUpperCase() : 'Inconnu';
-    let pos=null;
-    if(lat!==null && lon!==null) pos = {lat, lon};
-    else if(locator){
-      pos = await getGridCenter(locator);
-      if(!pos) pos = locatorToLatLon(locator);
-    }
-    qso.pos=pos || null;
-    allQSOs.push(qso);
-    const percent = Math.round(100*(i+1)/qsos.length);
-    progressBar.style.width = percent+'%';
-    progressBar.textContent = percent + '%';
-    await new Promise(r=>setTimeout(r,250));
+    return qsos;
   }
-  progressContainer.style.display="none";
-  bandSelect.dispatchEvent(new Event('change'));
-});
 
-// Afficher et mettre à jour marqueur étoile pour locator perso
-let starMarker = null;
-function addStarMarker(locator) {
-  if(starMarker){
-    map.removeLayer(starMarker);
+  async function getSpotHoleData(callsign) {
+    try {
+      const url = `https://spothole.app/api/v1/lookup/call?call=${encodeURIComponent(callsign)}`;
+      const response = await fetch(url);
+      if(!response.ok) throw new Error(`HTTP ${response.status}`);
+      const json = await response.json();
+      if(Array.isArray(json)) return json[0] || null;
+      return json;
+    } catch(e) {
+      console.error("Erreur API spothole.app pour", callsign, e);
+      return null;
+    }
   }
-  const pos = locatorToLatLon(locator);
-  if(!pos) return;
-  // Utiliser un SVG épuré en forme d'étoile jaune
-  const starIcon = L.divIcon({
-    html: '⭐',
-    className: '',
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
+
+  async function getGridCenter(gridLocator){
+    if (!gridLocator) return null;
+    try {
+      const response = await fetch(`https://spothole.app/api/v1/recherche/grille?grille=${encodeURIComponent(gridLocator)}`);
+      if(!response.ok) return null;
+      const json = await response.json();
+      if(json?.center?.latitude != null && json?.center?.longitude != null){
+        return { lat: json.center.latitude, lon: json.center.longitude };
+      }
+      return null;
+    } catch(e) {
+      console.error('Erreur récupération coordonnées grid', e);
+      return null;
+    }
+  }
+
+  function displayMarkers(filteredQSOs){
+    markersLayer.clearLayers();
+    let localizedCount = 0;
+    for(const qso of filteredQSOs){
+      if(qso.pos){
+        localizedCount++;
+        L.circleMarker([qso.pos.lat, qso.pos.lon], {
+          radius: 6,
+          color: getBandColor(qso.band),
+          fillColor: getBandColor(qso.band),
+          fillOpacity: 0.8
+        }).addTo(markersLayer)
+          .bindPopup(
+            `<b>Call:</b> ${qso.call}<br/><b>Bande:</b> ${qso.band}<br/><b>Date:</b> ${qso.date}<br/><b>Locator:</b> ${qso.locator}`
+          );
+      }
+    }
+    info.textContent = `QSO affichés : ${filteredQSOs.length} — QSO géolocalisés : ${localizedCount}`;
+    const first = filteredQSOs.find(q => q.pos);
+    if(first && first.pos) map.setView([first.pos.lat, first.pos.lon], 6);
+  }
+
+  bandSelect.addEventListener('change', () => {
+    if(!allQSOs.length) return;
+    const band = bandSelect.value;
+    let filter;
+    if(!band) {
+      filter = allQSOs;
+    } else if (band === "VHF") {
+      filter = allQSOs.filter(q => ["2M", "4M", "6M"].includes(q.band));
+    } else if (band === "UHF") {
+      filter = allQSOs.filter(q => ["70CM"].includes(q.band));
+    } else {
+      filter = allQSOs.filter(q => q.band === band);
+    }
+    displayMarkers(filter);
   });
-  starMarker = L.marker([pos.lat, pos.lon], {icon: starIcon}).addTo(map);
-  map.setView([pos.lat, pos.lon], 7);
-}
 
-document.getElementById('showLocatorBtn').addEventListener('click', () => {
-  const val = starLocatorInput.value.trim().toUpperCase();
-  if(val.length < 4){
-    alert('Merci d’entrer un locator valide (ex: JO20DJ)');
-    return;
-  }
-  addStarMarker(val);
-});
+  analyzeBtn.addEventListener('click', async () => {
+    if(!adifFile.files.length){
+      alert('Sélectionne un fichier ADIF.');
+      return;
+    }
+    info.textContent = "";
+    progressContainer.style.display = "block";
+    progressBar.style.width = "0%";
+    progressBar.textContent = "0%";
+
+    markersLayer.clearLayers();
+    map.setView([50.8,4.4],4);
+
+    const text = await adifFile.files[0].text();
+    const qsos = parseADIF(text);
+
+    allQSOs = [];
+    for(let i=0; i<qsos.length; i++){
+      const qso = qsos[i];
+      const spotData = await getSpotHoleData(qso.call);
+      let lat = null, lon = null, locator = null;
+      if(spotData){
+        locator = spotData.dx_grid || spotData.grid || null;
+        lat = spotData.dx_latitude != null ? spotData.dx_latitude : (spotData.latitude != null ? spotData.latitude : null);
+        lon = spotData.dx_longitude != null ? spotData.dx_longitude : (spotData.longitude != null ? spotData.longitude : null);
+      }
+      qso.locator = locator ? locator.toUpperCase() : 'Inconnu';
+      let pos = null;
+      if(lat !== null && lon !== null){
+        pos = {lat, lon};
+      } else if(locator){
+        pos = await getGridCenter(locator);
+        if(!pos){
+          pos = locatorToLatLon(locator);
+        }
+      }
+      qso.pos = pos || null;
+      allQSOs.push(qso);
+
+      const percent = Math.round((100*(i+1))/qsos.length);
+      progressBar.style.width = percent + '%';
+      progressBar.textContent = percent + '%';
+
+      await new Promise(r => setTimeout(r, 250));
+    }
+    progressContainer.style.display = 'none';
+    bandSelect.dispatchEvent(new Event('change'));
+  });
 </script>
 </body>
 </html>
