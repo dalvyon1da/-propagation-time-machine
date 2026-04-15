@@ -1,13 +1,11 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8" />
-  <title>Carte QSO avec locator dynamique</title>
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
-  <style>
+```html
+
+
+
+  
+  Visualisation QSO avec spothole.app API
+  
+  
     body {
       margin: 0;
       font-family: Arial, sans-serif;
@@ -39,8 +37,7 @@
       text-align: left;
     }
     input,
-    button,
-    select {
+    button {
       width: 100%;
       padding: 8px;
       margin: 5px 0;
@@ -56,80 +53,37 @@
     button:hover {
       background: #0a84ff;
     }
-  </style>
-</head>
-<body>
-  <div id="sidebar">
-    <h2>Visualisation QSO ADIF</h2>
+  
 
-    <label for="locatorInput">Entrer votre locator (ex: JO20HQ) :</label>
-    <input
-      type="text"
-      id="locatorInput"
-      placeholder="JO20HQ"
-      value="JO20HQ"
-      maxlength="6"
-    />
 
-    <input type="file" id="adifFile" accept=".adi,.adif" />
-    <button id="analyzeBtn">Analyser et afficher</button>
-    <button id="toggleTable">Afficher/Masquer liste QSO</button>
+  
+    Visualisation QSO avec spothole.app
 
-    <p id="info"></p>
+    
 
-    <table id="qsoTable">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>CALL</th>
-          <th>BAND</th>
-          <th>DATE</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
+    Analyser et afficher
+    Masquer liste QSO
 
-  <div id="map"></div>
+    
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-    const map = L.map("map").setView([50.8, 4.4], 4);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+    
+      
+        
+          #
+          CALL
+          BAND
+          DATE
+          LOCATOR
+        
+      
+      
+    
+  
 
-    // Conversion locator Maidenhead en latitude/longitude
-    function locatorToLatLon(locator) {
-      locator = locator.toUpperCase().trim();
-      if (locator.length < 4) return null;
-      const A = "A".charCodeAt(0);
-      // Calcul simple pour 4 caractères (precision ~10km)
-      const lon =
-        (locator.charCodeAt(0) - A) * 20 - 180 + parseInt(locator[2], 10) * 2;
-      const lat =
-        (locator.charCodeAt(1) - A) * 10 - 90 + parseInt(locator[3], 10) * 1;
-      return { lat, lon };
-    }
+  
 
-    // Parseur complet qui récupère tous les QSOs
-    function parseADIF(text) {
-      const qsos = [];
-      // Sépare par <EOR> (fin d'enregistrement)
-      const records = text.split(/<EOR>/i);
-      for (let rec of records) {
-        const callMatch = rec.match(/<CALL:\d+>\s*([^<\s]+)/i);
-        const bandMatch = rec.match(/<BAND:\d+>\s*([^<\s]+)/i);
-        const dateMatch = rec.match(/<QSO_DATE:\d+>\s*(\d{8})/i);
-
-        if (callMatch) {
-          const call = callMatch[1].trim();
-          const band = bandMatch ? bandMatch[1].trim() : "N/A";
-          const date = dateMatch ? dateMatch[1].trim() : "N/A";
-          qsos.push({ call, band, date });
-        }
-      }
-      return qsos;
-    }
-
+  
+  
     const infoElem = document.getElementById("info");
     const tbody = document.querySelector("#qsoTable tbody");
     const table = document.getElementById("qsoTable");
@@ -145,65 +99,137 @@
       }
     };
 
-    document
-      .getElementById("analyzeBtn")
-      .addEventListener("click", async () => {
-        const locator = document.getElementById("locatorInput").value.trim();
-        if (!locator || locator.length < 4) {
-          alert("Merci d'entrer un locator valide (ex: JO20HQ)");
-          return;
+    const map = L.map("map").setView([50.8, 4.4], 4);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
+
+    function locatorToLatLon(locator) {
+      locator = locator.toUpperCase().trim();
+      if (locator.length < 4) return null;
+      const A = "A".charCodeAt(0);
+      const lon = (locator.charCodeAt(0) - A) * 20 - 180 + parseInt(locator[2], 10) * 2 + 1;
+      const lat = (locator.charCodeAt(1) - A) * 10 - 90 + parseInt(locator[3], 10) + 0.5;
+      return { lat, lon };
+    }
+
+    function parseADIF(text) {
+      const qsos = [];
+      const records = text.split(/<EOR>/i);
+      for (let rec of records) {
+        const callMatch = rec.match(/<CALL:\d+>\s*([^<\s]+)/i);
+        const bandMatch = rec.match(/<BAND:\d+>\s*([^<\s]+)/i);
+        const dateMatch = rec.match(/<QSO_DATE:\d+>\s*(\d{8})/i);
+
+        if (callMatch) {
+          qsos.push({
+            call: callMatch[1].trim(),
+            band: bandMatch ? bandMatch[1].trim() : "N/A",
+            date: dateMatch ? dateMatch[1].trim() : "N/A",
+          });
+        }
+      }
+      return qsos;
+    }
+
+    async function getLocatorFromSpothole(callsign) {
+      try {
+        const url = `https://spothole.app/api/v1/lookup/call?call=${encodeURIComponent(callsign)}`;
+        const response = await fetch(url);
+        if (!response.ok)
+          throw new Error(`HTTP error ${response.status}`);
+        const data = await response.json();
+        return data.locator ? data.locator.toUpperCase() : null;
+      } catch (error) {
+        console.error("Erreur récupération locator spothole.app:", error);
+        return null;
+      }
+    }
+
+    async function afficherQSOsAvecSpotholeAPI(qsos) {
+      map.eachLayer((layer) => {
+        if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
+          map.removeLayer(layer);
+        }
+      });
+
+      tbody.innerHTML = "";
+
+      for (let i = 0; i < qsos.length; i++) {
+        const qso = qsos[i];
+        const locator = await getLocatorFromSpothole(qso.call);
+        qso.locator = locator || "Inconnu";
+        const pos = locator ? locatorToLatLon(locator) : null;
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td>${qso.call}</td>
+          <td>${qso.band}</td>
+          <td>${qso.date}</td>
+          <td>${qso.locator}</td>
+        `;
+        tbody.appendChild(tr);
+
+        if (pos) {
+          L.circleMarker([pos.lat, pos.lon], {
+            radius: 6,
+            color: "green",
+            fillOpacity: 0.8,
+          })
+            .bindPopup(
+              `<b>Call:</b> ${qso.call}<br/><b>Bande:</b> ${qso.band}<br/><b>Date:</b> ${qso.date}<br/><b>Locator:</b> ${qso.locator}`
+            )
+            .addTo(map);
         }
 
-        const fileInput = document.getElementById("adifFile");
-        if (!fileInput.files.length) {
-          alert("Merci de sélectionner un fichier ADIF.");
-          return;
-        }
+        // Pause pour limiter requêtes simultanées
+        await new Promise((r) => setTimeout(r, 250));
+      }
 
-        const file = fileInput.files[0];
-        const text = await file.text();
+      const first = qsos.find((q) => q.locator !== "Inconnu");
+      if (first) {
+        const centerPos = locatorToLatLon(first.locator);
+        if (centerPos) {
+          map.setView([centerPos.lat, centerPos.lon], 6);
+        }
+      }
+    }
+
+    document.getElementById("analyzeBtn").addEventListener("click", async () => {
+      const fileInput = document.getElementById("adifFile");
+      if (!fileInput.files.length) {
+        alert("Sélectionne un fichier ADIF.");
+        return;
+      }
+
+      try {
+        const text = await fileInput.files[0].text();
         const qsos = parseADIF(text);
 
         infoElem.textContent = `QSO détectés : ${qsos.length}`;
 
-        // Remplissage du tableau
-        tbody.innerHTML = "";
-        qsos.forEach((qso, idx) => {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `<td>${idx + 1}</td><td>${qso.call}</td><td>${qso.band}</td><td>${qso.date}</td>`;
-          tbody.appendChild(tr);
-        });
+        await afficherQSOsAvecSpotholeAPI(qsos);
+      } catch (error) {
+        alert(
+          "Erreur lors du traitement du fichier ou de la récupération des données."
+        );
+        console.error(error);
+      }
+    });
+  
 
-        // Nettoyage des marqueurs précédents
-        map.eachLayer((layer) => {
-          if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
-            map.removeLayer(layer);
-          }
-        });
 
-        // Converter locator en coordonnées
-        const centerPos = locatorToLatLon(locator);
-        if (!centerPos) {
-          alert("Le locator entré est invalide.");
-          return;
-        }
+```
+---
 
-        // Ajoute un marqueur par QSO à la position du locator saisi
-        qsos.forEach((qso) => {
-          L.circleMarker([centerPos.lat, centerPos.lon], {
-            radius: 5,
-            color: "red",
-            fillOpacity: 0.7,
-          })
-            .bindPopup(
-              `<b>Call:</b> ${qso.call}<br/><b>Bande:</b> ${qso.band}<br/><b>Date:</b> ${qso.date}`
-            )
-            .addTo(map);
-        });
+### Instructions d’utilisation
 
-        // Centre et zoom carte sur locator
-        map.setView([centerPos.lat, centerPos.lon], 6);
-      });
-  </script>
-</body>
-</html>
+1. Ouvre ce fichier dans un navigateur moderne.
+2. Sélectionne ton fichier ADIF avec le bouton prévu.
+3. Clique sur « Analyser et afficher ».
+4. Patiente pendant que les locators sont récupérés un par un via l’API spothole.app.
+5. Ta carte affichera tous les QSOs à leur position approximative avec popup informative.
+6. Utilise le bouton « Masquer liste QSO » pour cacher/afficher la table si tu souhaites.
+
+---
+
+N’hésite pas à me demander si tu veux intégrer du filtrage, des arcs, ou optimiser les temps de requête.
