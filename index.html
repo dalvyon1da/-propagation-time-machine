@@ -1,11 +1,13 @@
-```html
-
-
-
-  
-  Visualisation QSO avec spothole.app API
-  
-  
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Visualisation QSO avec spothole.app API</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <style>
     body {
       margin: 0;
       font-family: Arial, sans-serif;
@@ -53,37 +55,37 @@
     button:hover {
       background: #0a84ff;
     }
-  
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <h2>Visualisation QSO avec spothole.app</h2>
 
+    <input type="file" id="adifFile" accept=".adi,.adif" />
 
-  
-    Visualisation QSO avec spothole.app
+    <button id="analyzeBtn">Analyser et afficher</button>
+    <button id="toggleTable">Masquer liste QSO</button>
 
-    
+    <p id="info"></p>
 
-    Analyser et afficher
-    Masquer liste QSO
+    <table id="qsoTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>CALL</th>
+          <th>BAND</th>
+          <th>DATE</th>
+          <th>LOCATOR</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
-    
+  <div id="map"></div>
 
-    
-      
-        
-          #
-          CALL
-          BAND
-          DATE
-          LOCATOR
-        
-      
-      
-    
-  
-
-  
-
-  
-  
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
     const infoElem = document.getElementById("info");
     const tbody = document.querySelector("#qsoTable tbody");
     const table = document.getElementById("qsoTable");
@@ -215,21 +217,6 @@
         console.error(error);
       }
     });
-  
-
-
-```
----
-
-### Instructions d’utilisation
-
-1. Ouvre ce fichier dans un navigateur moderne.
-2. Sélectionne ton fichier ADIF avec le bouton prévu.
-3. Clique sur « Analyser et afficher ».
-4. Patiente pendant que les locators sont récupérés un par un via l’API spothole.app.
-5. Ta carte affichera tous les QSOs à leur position approximative avec popup informative.
-6. Utilise le bouton « Masquer liste QSO » pour cacher/afficher la table si tu souhaites.
-
----
-
-N’hésite pas à me demander si tu veux intégrer du filtrage, des arcs, ou optimiser les temps de requête.
+  </script>
+</body>
+</html>
