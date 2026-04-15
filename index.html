@@ -23,13 +23,10 @@
   <h2>QSO ADIF et carte spothole.app</h2>
   <input type="file" id="adifFile" accept=".adi,.adif" />
   <button id="analyzeBtn">Analyser et afficher</button>
-
   <div class="progress-container" id="progressContainer">
     <div class="progress-bar" id="progressBar">0%</div>
   </div>
-
   <p id="info"></p>
-
   <table id="qsoTable">
     <thead><tr><th>#</th><th>Callsign</th><th>Bande</th><th>Date</th><th>Locator</th></tr></thead>
     <tbody></tbody>
@@ -39,10 +36,11 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+  // --- Initialisation carte OSM (PAS Stamen)
   const map = L.map('map').setView([50.8,4.4],4);
-  L.tileLayer('https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}.jpg', {
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18,
-    attribution: 'Map tiles &copy; Stamen | Data &copy; OpenStreetMap'
+    attribution: '© OpenStreetMap contributors'
   }).addTo(map);
 
   const adifFile = document.getElementById('adifFile');
@@ -120,8 +118,10 @@
     progressBar.textContent = "0%";
 
     map.eachLayer(layer => {
-      if(layer instanceof L.Marker || layer instanceof L.CircleMarker){
-        map.removeLayer(layer);
+      if (layer !== map._layersMinZoom && layer !== map._layersMaxZoom) {
+        if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
+          map.removeLayer(layer);
+        }
       }
     });
 
@@ -136,9 +136,9 @@
       const spotData = await getSpotHoleData(qso.call);
       let lat = null, lon = null, locator = null;
       if(spotData){
-        locator = spotData.dx_grid || null;
-        lat = ('dx_latitude' in spotData) ? spotData.dx_latitude : (('latitude' in spotData) ? spotData.latitude : null);
-        lon = ('dx_longitude' in spotData) ? spotData.dx_longitude : (('longitude' in spotData) ? spotData.longitude : null);
+        locator = spotData.dx_grid || spotData.grid || null;
+        lat = spotData.dx_latitude != null ? spotData.dx_latitude : (spotData.latitude != null ? spotData.latitude : null);
+        lon = spotData.dx_longitude != null ? spotData.dx_longitude : (spotData.longitude != null ? spotData.longitude : null);
       }
       qso.locator = locator ? locator.toUpperCase() : 'Inconnu';
       let pos = null;
@@ -184,6 +184,5 @@
     info.textContent = `QSO détectés : ${qsos.length} — QSO géolocalisés : ${localizedCount}`;
   });
 </script>
-
 </body>
 </html>
