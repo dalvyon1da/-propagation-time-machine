@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<title>QSO ADIF & Carte - Export Image</title>
+<title>QSO ADIF & spothole.app carte</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
   body { margin:0; font-family: Arial, sans-serif; background: #1e1e1e; color: #e0e0e0; display: flex; height: 100vh; }
@@ -17,7 +17,10 @@
   .progress-bar { height: 20px; background: #4caf50; width: 0%; border-radius: 8px; text-align: center; color: #000; line-height: 20px; font-weight: bold; }
   #info { margin-top: 5px; color: #bbb; font-size: 13px; }
   #qsoTable { display:none; }
-  .menu-export { margin-bottom:8px; }
+  .legend {
+    font-size: 13px; margin-top: 10px; padding: 6px; background: #262626; border-radius: 6px;
+  }
+  .legend span { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border-radius: 8px; vertical-align: middle;}
 </style>
 </head>
 <body>
@@ -25,16 +28,7 @@
   <h2>QSO ADIF / Carte spothole.app</h2>
   <input type="file" id="adifFile" accept=".adi,.adif" />
   <button id="analyzeBtn">Analyser et afficher</button>
-
-  <div class="menu-export">
-    <button id="exportBtn">Enregistrer la carte</button>
-    <select id="exportMenu" style="display:none;">
-      <option value="">-- choisir un format --</option>
-      <option value="points-png">Enregistrer uniquement les points QSO (PNG, transparent)</option>
-      <option value="full-jpg">Enregistrer la carte complète (JPG, fond inclus)</option>
-    </select>
-  </div>
-
+  
   <select id="bandSelect">
     <option value="">Toutes bandes</option>
     <option value="160M">160m</option>
@@ -60,225 +54,215 @@
   </div>
 
   <p id="info"></p>
+
   <table id="qsoTable">
     <thead><tr><th>#</th><th>Callsign</th><th>Bande</th><th>Date</th><th>Locator</th></tr></thead>
     <tbody></tbody>
   </table>
+  
+  <div class="legend">
+    <b>Couleur par bande :</b><br>
+    <span style="background:#800080"></span>160m
+    <span style="background:#0000CD"></span>80m
+    <span style="background:#00CED1"></span>60m
+    <span style="background:#228B22"></span>40m
+    <span style="background:#8B4513"></span>30m
+    <span style="background:#FFD700"></span>20m
+    <span style="background:#FF8C00"></span>17m
+    <span style="background:#DC143C"></span>15m
+    <span style="background:#FF1493"></span>12m
+    <span style="background:#00FF00"></span>10m
+    <span style="background:#00FA9A"></span>6m
+    <span style="background:#20B2AA"></span>4m
+    <span style="background:#1E90FF"></span>2m
+    <span style="background:#FF4500"></span>70cm
+    <span style="background:#00BFFF"></span>VHF
+    <span style="background:#A52A2A"></span>UHF
+  </div>
 </div>
 <div id="map"></div>
 
-<!-- html2canvas pour screenshot -->
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-function getBandColor(band) {
-  switch(band) {
-    case "160M": return "#800080";
-    case "80M":  return "#0000CD";
-    case "60M":  return "#00CED1";
-    case "40M":  return "#228B22";
-    case "30M":  return "#8B4513";
-    case "20M":  return "#FFD700";
-    case "17M":  return "#FF8C00";
-    case "15M":  return "#DC143C";
-    case "12M":  return "#FF1493";
-    case "10M":  return "#00FF00";
-    case "6M":   return "#00FA9A";
-    case "4M":   return "#20B2AA";
-    case "2M":   return "#1E90FF";
-    case "70CM": return "#FF4500";
-    case "VHF":  return "#00BFFF";
-    case "UHF":  return "#A52A2A";
-    default:     return "#888888";
+  function getBandColor(band) {
+    switch(band) {
+      case "160M": return "#800080";   // violet foncé
+      case "80M":  return "#0000CD";   // bleu moyen
+      case "60M":  return "#00CED1";   // turquoise
+      case "40M":  return "#228B22";   // vert
+      case "30M":  return "#8B4513";   // marron
+      case "20M":  return "#FFD700";   // or
+      case "17M":  return "#FF8C00";   // orange foncé
+      case "15M":  return "#DC143C";   // rouge foncé
+      case "12M":  return "#FF1493";   // rose
+      case "10M":  return "#00FF00";   // vert vif
+      case "6M":   return "#00FA9A";   // vert menthe
+      case "4M":   return "#20B2AA";   // bleu-vert
+      case "2M":   return "#1E90FF";   // bleu ciel
+      case "70CM": return "#FF4500";   // orange-rouge
+      case "VHF":  return "#00BFFF";   // bleu
+      case "UHF":  return "#A52A2A";   // brun
+      default:     return "#888888";   // gris
+    }
   }
-}
-const map = L.map('map').setView([50.8,4.4],4);
-const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 18,
-  attribution: '© OpenStreetMap contributors'
-}).addTo(map);
 
-const adifFile = document.getElementById('adifFile');
-const analyzeBtn = document.getElementById('analyzeBtn');
-const bandSelect = document.getElementById('bandSelect');
-const info = document.getElementById('info');
-const progressContainer = document.getElementById('progressContainer');
-const progressBar = document.getElementById('progressBar');
-const exportBtn = document.getElementById('exportBtn');
-const exportMenu = document.getElementById('exportMenu');
-let allQSOs = [];
-let markersLayer = L.layerGroup().addTo(map);
+  const map = L.map('map').setView([50.8,4.4],4);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
 
-function locatorToLatLon(locator){
-  if(!locator || locator.length < 4) return null;
-  locator = locator.toUpperCase();
-  const A = 'A'.charCodeAt(0);
-  const lon = (locator.charCodeAt(0) - A)*20 - 180 + parseInt(locator[2],10)*2 + 1;
-  const lat = (locator.charCodeAt(1) - A)*10 - 90 + parseInt(locator[3],10) + 0.5;
-  return {lat, lon};
-}
-function parseADIF(text) {
-  const qsos = [];
-  const records = text.split(/<EOR>/i);
-  for(let rec of records) {
-    const callMatch = rec.match(/<CALL:\s*\d+>\s*([^<\s]+)/i);
-    if (!callMatch) continue;
-    const bandMatch = rec.match(/<BAND:\s*\d+>\s*([^<\s]+)/i);
-    const dateMatch = rec.match(/<QSO_DATE:\s*\d+>\s*(\d{8})/i);
-    qsos.push({
-      call: callMatch[1].trim().toUpperCase(),
-      band: bandMatch ? bandMatch[1].trim().toUpperCase() : 'N/A',
-      date: dateMatch ? dateMatch[1].trim() : 'N/A'
-    });
+  const adifFile = document.getElementById('adifFile');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const bandSelect = document.getElementById('bandSelect');
+  const info = document.getElementById('info');
+  const progressContainer = document.getElementById('progressContainer');
+  const progressBar = document.getElementById('progressBar');
+  let allQSOs = [];
+  let markersLayer = L.layerGroup().addTo(map);
+
+  function locatorToLatLon(locator){
+    if(!locator || locator.length < 4) return null;
+    locator = locator.toUpperCase();
+    const A = 'A'.charCodeAt(0);
+    const lon = (locator.charCodeAt(0) - A)*20 - 180 + parseInt(locator[2],10)*2 + 1;
+    const lat = (locator.charCodeAt(1) - A)*10 - 90 + parseInt(locator[3],10) + 0.5;
+    return {lat, lon};
   }
-  return qsos;
-}
-async function getSpotHoleData(callsign) {
-  try {
-    const url = `https://spothole.app/api/v1/lookup/call?call=${encodeURIComponent(callsign)}`;
-    const response = await fetch(url);
-    if(!response.ok) throw new Error(`HTTP ${response.status}`);
-    const json = await response.json();
-    if(Array.isArray(json)) return json[0] || null;
-    return json;
-  } catch(e) {
-    console.error("Erreur API spothole.app pour", callsign, e);
-    return null;
-  }
-}
-async function getGridCenter(gridLocator){
-  if (!gridLocator) return null;
-  try {
-    const response = await fetch(`https://spothole.app/api/v1/recherche/grille?grille=${encodeURIComponent(gridLocator)}`);
-    if(!response.ok) return null;
-    const json = await response.json();
-    if(json?.center?.latitude != null && json?.center?.longitude != null){
-      return { lat: json.center.latitude, lon: json.center.longitude };
+
+  function parseADIF(text) {
+    const qsos = [];
+    const records = text.split(/<EOR>/i);
+    for(let rec of records) {
+      const callMatch = rec.match(/<CALL:\s*\d+>\s*([^<\s]+)/i);
+      if (!callMatch) continue;
+      const bandMatch = rec.match(/<BAND:\s*\d+>\s*([^<\s]+)/i);
+      const dateMatch = rec.match(/<QSO_DATE:\s*\d+>\s*(\d{8})/i);
+      qsos.push({
+        call: callMatch[1].trim().toUpperCase(),
+        band: bandMatch ? bandMatch[1].trim().toUpperCase() : 'N/A',
+        date: dateMatch ? dateMatch[1].trim() : 'N/A'
+      });
     }
-    return null;
-  } catch(e) {
-    console.error('Erreur récupération coordonnées grid', e);
-    return null;
+    return qsos;
   }
-}
-function displayMarkers(filteredQSOs){
-  markersLayer.clearLayers();
-  let localizedCount = 0;
-  for(const qso of filteredQSOs){
-    if(qso.pos){
-      localizedCount++;
-      L.circleMarker([qso.pos.lat, qso.pos.lon], {
-        radius: 6,
-        color: getBandColor(qso.band),
-        fillColor: getBandColor(qso.band),
-        fillOpacity: 0.8
-      }).addTo(markersLayer)
-        .bindPopup(
-          `<b>Call:</b> ${qso.call}<br/><b>Bande:</b> ${qso.band}<br/><b>Date:</b> ${qso.date}<br/><b>Locator:</b> ${qso.locator}`
-        );
+
+  async function getSpotHoleData(callsign) {
+    try {
+      const url = `https://spothole.app/api/v1/lookup/call?call=${encodeURIComponent(callsign)}`;
+      const response = await fetch(url);
+      if(!response.ok) throw new Error(`HTTP ${response.status}`);
+      const json = await response.json();
+      if(Array.isArray(json)) return json[0] || null;
+      return json;
+    } catch(e) {
+      console.error("Erreur API spothole.app pour", callsign, e);
+      return null;
     }
   }
-  info.textContent = `QSO affichés : ${filteredQSOs.length} — QSO géolocalisés : ${localizedCount}`;
-  const first = filteredQSOs.find(q => q.pos);
-  if(first && first.pos) map.setView([first.pos.lat, first.pos.lon], 6);
-}
-bandSelect.addEventListener('change', () => {
-  if(!allQSOs.length) return;
-  const band = bandSelect.value;
-  let filter;
-  if(!band) {
-    filter = allQSOs;
-  } else if (band === "VHF") {
-    filter = allQSOs.filter(q => ["2M", "4M", "6M"].includes(q.band));
-  } else if (band === "UHF") {
-    filter = allQSOs.filter(q => ["70CM"].includes(q.band));
-  } else {
-    filter = allQSOs.filter(q => q.band === band);
-  }
-  displayMarkers(filter);
-});
-analyzeBtn.addEventListener('click', async () => {
-  if(!adifFile.files.length){
-    alert('Sélectionne un fichier ADIF.');
-    return;
-  }
-  info.textContent = "";
-  progressContainer.style.display = "block";
-  progressBar.style.width = "0%";
-  progressBar.textContent = "0%";
-  markersLayer.clearLayers();
-  map.setView([50.8,4.4],4);
-  const text = await adifFile.files[0].text();
-  const qsos = parseADIF(text);
-  allQSOs = [];
-  for(let i=0; i<qsos.length; i++){
-    const qso = qsos[i];
-    const spotData = await getSpotHoleData(qso.call);
-    let lat = null, lon = null, locator = null;
-    if(spotData){
-      locator = spotData.dx_grid || spotData.grid || null;
-      lat = spotData.dx_latitude != null ? spotData.dx_latitude : (spotData.latitude != null ? spotData.latitude : null);
-      lon = spotData.dx_longitude != null ? spotData.dx_longitude : (spotData.longitude != null ? spotData.longitude : null);
+
+  async function getGridCenter(gridLocator){
+    if (!gridLocator) return null;
+    try {
+      const response = await fetch(`https://spothole.app/api/v1/recherche/grille?grille=${encodeURIComponent(gridLocator)}`);
+      if(!response.ok) return null;
+      const json = await response.json();
+      if(json?.center?.latitude != null && json?.center?.longitude != null){
+        return { lat: json.center.latitude, lon: json.center.longitude };
+      }
+      return null;
+    } catch(e) {
+      console.error('Erreur récupération coordonnées grid', e);
+      return null;
     }
-    qso.locator = locator ? locator.toUpperCase() : 'Inconnu';
-    let pos = null;
-    if(lat !== null && lon !== null){
-      pos = {lat, lon};
-    } else if(locator){
-      pos = await getGridCenter(locator);
-      if(!pos){
-        pos = locatorToLatLon(locator);
+  }
+
+  function displayMarkers(filteredQSOs){
+    markersLayer.clearLayers();
+    let localizedCount = 0;
+    for(const qso of filteredQSOs){
+      if(qso.pos){
+        localizedCount++;
+        L.circleMarker([qso.pos.lat, qso.pos.lon], {
+          radius: 6,
+          color: getBandColor(qso.band),
+          fillColor: getBandColor(qso.band),
+          fillOpacity: 0.8
+        }).addTo(markersLayer)
+          .bindPopup(
+            `<b>Call:</b> ${qso.call}<br/><b>Bande:</b> ${qso.band}<br/><b>Date:</b> ${qso.date}<br/><b>Locator:</b> ${qso.locator}`
+          );
       }
     }
-    qso.pos = pos || null;
-    allQSOs.push(qso);
-    const percent = Math.round((100*(i+1))/qsos.length);
-    progressBar.style.width = percent + '%';
-    progressBar.textContent = percent + '%';
-    await new Promise(r => setTimeout(r, 250));
+    info.textContent = `QSO affichés : ${filteredQSOs.length} — QSO géolocalisés : ${localizedCount}`;
+    const first = filteredQSOs.find(q => q.pos);
+    if(first && first.pos) map.setView([first.pos.lat, first.pos.lon], 6);
   }
-  progressContainer.style.display = 'none';
-  bandSelect.dispatchEvent(new Event('change'));
-});
-// --- EXPORTS ---
-exportBtn.onclick = () => {
-  exportMenu.style.display = exportMenu.style.display === "none" ? "" : "none";
-};
-exportMenu.onchange = async () => {
-  exportMenu.style.display = "none";
-  if(!exportMenu.value) return;
-  // Points QSO transparent
-  if(exportMenu.value === "points-png") {
-    // Masque tuiles de fond
-    tileLayer.getContainer().style.opacity = 0;
-    setTimeout(() => {
-      html2canvas(document.getElementById('map'), {
-        backgroundColor: null,  // transparent
-        useCORS: true
-      }).then(canvas => {
-        tileLayer.getContainer().style.opacity = 1;
-        let link = document.createElement('a');
-        link.download = "QSO_points_only.png";
-        link.href = canvas.toDataURL("image/png");
-        link.click();
-      });
-    }, 350); // Laisse leaflet mettre à jour
-  }
-  // Capture carte complète
-  if(exportMenu.value === "full-jpg") {
-    tileLayer.getContainer().style.opacity = 1;
-    setTimeout(() => {
-      html2canvas(document.getElementById('map'), {
-        useCORS: true
-      }).then(canvas => {
-        let link = document.createElement('a');
-        link.download = "QSO_map_full.jpg";
-        link.href = canvas.toDataURL("image/jpeg",1.0);
-        link.click();
-      });
-    }, 250);
-  }
-};
+
+  bandSelect.addEventListener('change', () => {
+    if(!allQSOs.length) return;
+    const band = bandSelect.value;
+    let filter;
+    if(!band) {
+      filter = allQSOs;
+    } else if (band === "VHF") {
+      filter = allQSOs.filter(q => ["2M", "4M", "6M"].includes(q.band));
+    } else if (band === "UHF") {
+      filter = allQSOs.filter(q => ["70CM"].includes(q.band));
+    } else {
+      filter = allQSOs.filter(q => q.band === band);
+    }
+    displayMarkers(filter);
+  });
+
+  analyzeBtn.addEventListener('click', async () => {
+    if(!adifFile.files.length){
+      alert('Sélectionne un fichier ADIF.');
+      return;
+    }
+    info.textContent = "";
+    progressContainer.style.display = "block";
+    progressBar.style.width = "0%";
+    progressBar.textContent = "0%";
+
+    markersLayer.clearLayers();
+    map.setView([50.8,4.4],4);
+
+    const text = await adifFile.files[0].text();
+    const qsos = parseADIF(text);
+
+    allQSOs = [];
+    for(let i=0; i<qsos.length; i++){
+      const qso = qsos[i];
+      const spotData = await getSpotHoleData(qso.call);
+      let lat = null, lon = null, locator = null;
+      if(spotData){
+        locator = spotData.dx_grid || spotData.grid || null;
+        lat = spotData.dx_latitude != null ? spotData.dx_latitude : (spotData.latitude != null ? spotData.latitude : null);
+        lon = spotData.dx_longitude != null ? spotData.dx_longitude : (spotData.longitude != null ? spotData.longitude : null);
+      }
+      qso.locator = locator ? locator.toUpperCase() : 'Inconnu';
+      let pos = null;
+      if(lat !== null && lon !== null){
+        pos = {lat, lon};
+      } else if(locator){
+        pos = await getGridCenter(locator);
+        if(!pos){
+          pos = locatorToLatLon(locator);
+        }
+      }
+      qso.pos = pos || null;
+      allQSOs.push(qso);
+
+      const percent = Math.round((100*(i+1))/qsos.length);
+      progressBar.style.width = percent + '%';
+      progressBar.textContent = percent + '%';
+
+      await new Promise(r => setTimeout(r, 250));
+    }
+    progressContainer.style.display = 'none';
+    bandSelect.dispatchEvent(new Event('change'));
+  });
 </script>
 </body>
 </html>
