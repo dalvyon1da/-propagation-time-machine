@@ -2,58 +2,28 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<title>Affichage QSO ADIF avec spothole.app</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<title>QSO ADIF + Carte spothole.app</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-  body {
-    margin: 0; font-family: Arial, sans-serif;
-    background: #1e1e1e; color: #e0e0e0;
-    display: flex; height: 100vh;
-  }
-  #sidebar {
-    width: 350px; background: #111;
-    padding: 20px; overflow: auto; box-sizing: border-box;
-  }
+  body { margin: 0; font-family: Arial, sans-serif; background: #1e1e1e; color: #e0e0e0; display: flex; height: 100vh; }
+  #sidebar { width: 350px; background: #111; padding: 20px; box-sizing: border-box; overflow: auto; }
   #map { flex: 1; }
-  table {
-    width: 100%; border-collapse: collapse;
-    font-size: 12px; margin-top: 10px;
-  }
-  th, td {
-    border: 1px solid #444; padding: 3px 5px; text-align: left;
-  }
-  input, button {
-    width: 100%; padding: 8px;
-    margin: 5px 0; background: #222;
-    border: 1px solid #444; color: #fff; box-sizing: border-box;
-  }
-  button {
-    cursor: pointer; background: #007bff;
-  }
-  button:hover {
-    background: #0a84ff;
-  }
-  .progress-container {
-    width: 100%; background: #333;
-    border-radius: 8px; margin: 10px 0;
-    display: none;
-  }
-  .progress-bar {
-    height: 20px; background: #4caf50;
-    border-radius: 8px; width: 0%;
-    text-align: center; color: #fff;
-    line-height: 20px; font-size: 12px;
-  }
+  input, button { width: 100%; padding: 8px; margin: 5px 0; background: #222; border: 1px solid #444; color: #fff; box-sizing: border-box; }
+  button { cursor: pointer; background: #007bff; border-radius: 4px; }
+  button:hover { background: #0a84ff; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+  th, td { border: 1px solid #444; padding: 5px 8px; text-align: left; }
+  .progress-container { display: none; width: 100%; background: #222; border-radius: 8px; margin: 10px 0; }
+  .progress-bar { height: 20px; background: #4caf50; width: 0%; border-radius: 8px; text-align: center; color: #000; line-height: 20px; font-weight: bold; }
+  #info { margin-top: 5px; color: #bbb; font-size: 13px; }
 </style>
 </head>
 <body>
 
 <div id="sidebar">
-  <h2>Visualisation QSO ADIF</h2>
-
+  <h2>QSO ADIF & spothole.app</h2>
   <input type="file" id="adifFile" accept=".adi,.adif" />
   <button id="analyzeBtn">Analyser et afficher</button>
-  <button id="toggleTable">Masquer la liste QSO</button>
 
   <div class="progress-container" id="progressContainer">
     <div class="progress-bar" id="progressBar">0%</div>
@@ -62,9 +32,7 @@
   <p id="info"></p>
 
   <table id="qsoTable">
-    <thead>
-      <tr><th>#</th><th>CALL</th><th>BAND</th><th>DATE</th><th>LOCATOR</th></tr>
-    </thead>
+    <thead><tr><th>#</th><th>Callsign</th><th>Bande</th><th>Date</th><th>Locator</th></tr></thead>
     <tbody></tbody>
   </table>
 </div>
@@ -73,164 +41,151 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  // Initialisation carte Leaflet
   const map = L.map('map').setView([50.8,4.4],4);
   L.tileLayer('https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}.jpg', {
+    maxZoom: 18,
     attribution: 'Map tiles &copy; Stamen | Data &copy; OpenStreetMap',
-    maxZoom: 18
   }).addTo(map);
 
-  const infoElem = document.getElementById('info');
+  const adifFile = document.getElementById('adifFile');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const info = document.getElementById('info');
   const tbody = document.querySelector('#qsoTable tbody');
-  const table = document.getElementById('qsoTable');
-  const toggleTableBtn = document.getElementById('toggleTable');
   const progressContainer = document.getElementById('progressContainer');
   const progressBar = document.getElementById('progressBar');
 
-  toggleTableBtn.onclick = () => {
-    if(table.style.display==='none') {
-      table.style.display = 'table';
-      toggleTableBtn.textContent = 'Masquer la liste QSO';
-    } else {
-      table.style.display = 'none';
-      toggleTableBtn.textContent = 'Afficher la liste QSO';
-    }
-  };
-
-  // Parse fichier ADIF pour extraire call, band, date
   function parseADIF(text) {
     const qsos = [];
     const records = text.split(/<EOR>/i);
     for(let rec of records) {
-      const callM = rec.match(/<CALL:\d+>\s*([^<\s]+)/i);
-      const bandM = rec.match(/<BAND:\d+>\s*([^<\s]+)/i);
-      const dateM = rec.match(/<QSO_DATE:\d+>\s*(\d{8})/i);
-      if(callM) {
-        qsos.push({
-          call: callM[1].trim(),
-          band: bandM ? bandM[1].trim() : 'N/A',
-          date: dateM ? dateM[1].trim() : 'N/A'
-        });
-      }
+      const callMatch = rec.match(/<CALL:\s*\d+>\s*([^<\s]+)/i);
+      if (!callMatch) continue;
+      const bandMatch = rec.match(/<BAND:\s*\d+>\s*([^<\s]+)/i);
+      const dateMatch = rec.match(/<QSO_DATE:\s*\d+>\s*(\d{8})/i);
+      qsos.push({
+        call: callMatch[1].trim().toUpperCase(),
+        band: bandMatch ? bandMatch[1].trim() : 'N/A',
+        date: dateMatch ? dateMatch[1].trim() : 'N/A'
+      });
     }
     return qsos;
   }
 
-  // Appel API spothole.app (récupère locator & coords)
-  async function getLocatorAndPos(callsign) {
+  async function getSpotHoleData(callsign){
     try {
-      const url = `https://spothole.app/api/v1/lookup/call?call=${encodeURIComponent(callsign)}`;
-      const response = await fetch(url);
+      const response = await fetch(`https://spothole.app/api/v1/lookup/call?call=${encodeURIComponent(callsign)}`);
       if(!response.ok) throw new Error('HTTP '+response.status);
       const data = await response.json();
-      // Retourne loc + lat/lon si existants
-      return {
-        locator: data.dx_grid ? data.dx_grid.toUpperCase() : null,
-        lat: typeof data.dx_latitude === 'number' ? data.dx_latitude : null,
-        lon: typeof data.dx_longitude === 'number' ? data.dx_longitude : null
-      };
+      return Array.isArray(data) ? (data[0] || null) : data;
     } catch(e) {
-      console.error("Erreur API spothole.app pour "+callsign,e);
+      console.error('Erreur API spothole.app pour', callsign, e);
       return null;
     }
   }
 
-  // Affiche QSOs sur la carte et tableau, avec barre de progression
-  async function afficherQSOs(qsos) {
-    // Supprime anciens marqueurs
-    map.eachLayer(layer => {
-      if(layer instanceof L.Marker || layer instanceof L.CircleMarker) map.removeLayer(layer);
-    });
-
-    tbody.innerHTML = "";
-    progressContainer.style.display = "block";
-    progressBar.style.width = "0%";
-    progressBar.textContent = "0%";
-
-    let countGeolocalises = 0;
-
-    for(let i=0; i<qsos.length; i++) {
-      const qso = qsos[i];
-      const res = await getLocatorAndPos(qso.call);
-      if(res) {
-        qso.locator = res.locator || 'Inconnu';
-        let pos = null;
-        if(res.lat !== null && res.lon !== null) pos = {lat: res.lat, lon: res.lon};
-        else if(res.locator) {
-          // Conversion minimaliste locator->latlon si coord non dispo
-          pos = locatorToLatLon(res.locator);
-        }
-        if(pos) {
-          countGeolocalises++;
-          L.circleMarker([pos.lat, pos.lon], {
-            radius: 6,
-            color: 'green',
-            fillOpacity: 0.8
-          }).bindPopup(`<b>Call:</b> ${qso.call}<br><b>Bande:</b> ${qso.band}<br><b>Date:</b> ${qso.date}<br><b>Locator:</b> ${qso.locator}`)
-          .addTo(map);
-        }
-      } else {
-        qso.locator = 'Inconnu';
+  async function getGridCenter(gridLocator){
+    if(!gridLocator) return null;
+    try {
+      const response = await fetch(`https://spothole.app/api/v1/recherche/grille?grille=${encodeURIComponent(gridLocator)}`);
+      if(!response.ok) return null;
+      const json = await response.json();
+      if(json?.center?.latitude != null && json?.center?.longitude != null){
+        return {lat: json.center.latitude, lon: json.center.longitude};
       }
-
-      // Remplissage tableau
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${i+1}</td><td>${qso.call}</td><td>${qso.band}</td><td>${qso.date}</td><td>${qso.locator}</td>`;
-      tbody.appendChild(tr);
-
-      // Mise à jour barre progression
-      const pct = Math.round(100*(i+1)/qsos.length);
-      progressBar.style.width = pct + "%";
-      progressBar.textContent = pct + "%";
-
-      // Pause pour ne pas saturer l'API
-      await new Promise(r => setTimeout(r,250));
+      return null;
+    } catch(e) {
+      console.error('Erreur récupération coordonnees grid', e);
+      return null;
     }
-
-    progressContainer.style.display = "none";
-
-    // Centre la carte sur le premier QSO géolocalisé
-    const first = qsos.find(q => q.locator !== "Inconnu");
-    if(first) {
-      let centerPos = null;
-      if(first.lat !== undefined && first.lon !== undefined && first.lat !== null && first.lon !== null)
-        centerPos = {lat: first.lat, lon: first.lon};
-      else if(first.locator)
-        centerPos = locatorToLatLon(first.locator);
-      if(centerPos) map.setView([centerPos.lat, centerPos.lon], 6);
-    }
-
-    infoElem.textContent = `QSO détectés : ${qsos.length} — QSO géolocalisés : ${countGeolocalises}`;
   }
 
-  // Conversion basique locator Maidenhead → lat lon (approximation)
-  function locatorToLatLon(locator) {
-    locator = locator.toUpperCase().trim();
-    if(locator.length < 4) return null;
+  function locatorToLatLon(locator){
+    if(!locator || locator.length < 4) return null;
+    locator = locator.toUpperCase();
     const A = 'A'.charCodeAt(0);
-    const lon = (locator.charCodeAt(0)-A)*20 -180 + parseInt(locator[2],10)*2 +1;
-    const lat = (locator.charCodeAt(1)-A)*10 -90 + parseInt(locator[3],10) +0.5;
+    const lon = (locator.charCodeAt(0) - A)*20 - 180 + parseInt(locator[2],10)*2 + 1;
+    const lat = (locator.charCodeAt(1) - A)*10 - 90 + parseInt(locator[3],10) + 0.5;
     return {lat, lon};
   }
 
-  document.getElementById("analyzeBtn").addEventListener("click", async () => {
-    const fileInput = document.getElementById("adifFile");
-    if(!fileInput.files.length) {
-      alert("Sélectionne un fichier ADIF.");
+  analyzeBtn.addEventListener('click', async () => {
+    if(!adifFile.files.length){
+      alert('Veuillez sélectionner un fichier ADIF');
       return;
     }
-    try {
-      infoElem.textContent = "";
-      const text = await fileInput.files[0].text();
-      const qsos = parseADIF(text);
-      infoElem.textContent = `QSO détectés : ${qsos.length}`;
-      await afficherQSOs(qsos);
-    } catch(err) {
-      infoElem.textContent = "Erreur lors du traitement du fichier ou de la récupération des données.";
-      console.error(err);
+
+    info.textContent = '';
+    tbody.innerHTML = '';
+    progressContainer.style.display = 'block';
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+
+    map.eachLayer(layer => {
+      if(layer instanceof L.Marker || layer instanceof L.CircleMarker) {
+        map.removeLayer(layer);
+      }
+    });
+
+    const text = await adifFile.files[0].text();
+    const qsos = parseADIF(text);
+    info.textContent = `QSO détectés : ${qsos.length}`;
+
+    let localizedCount = 0;
+
+    for(let i = 0; i < qsos.length; i++){
+      const qso = qsos[i];
+      let spotData = await getSpotHoleData(qso.call);
+      let lat = null, lon = null, locator = null;
+      if(spotData){
+        locator = spotData.dx_grid || null;
+        lat = spotData.dx_latitude || null;
+        lon = spotData.dx_longitude || null;
+      }
+      qso.locator = locator ? locator.toUpperCase() : 'Inconnu';
+      let pos = null;
+      if(lat !== null && lon !== null){
+        pos = {lat, lon};
+      } else if(locator){
+        pos = await getGridCenter(locator);
+        if(!pos){
+          // fallback conversion approximative
+          pos = locatorToLatLon(locator);
+        }
+      }
+      if(pos){
+        localizedCount++;
+        L.circleMarker([pos.lat, pos.lon], {
+          radius: 6,
+          color: 'green',
+          fillOpacity: 0.8,
+        }).addTo(map).bindPopup(`<b>Call:</b> ${qso.call}<br/><b>Bande:</b> ${qso.band}<br/><b>Date:</b> ${qso.date}<br/><b>Locator:</b> ${qso.locator}`);
+      }
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${i+1}</td><td>${qso.call}</td><td>${qso.band}</td><td>${qso.date}</td><td>${qso.locator}</td>`;
+      tbody.appendChild(tr);
+
+      const percent = Math.round(100 * (i + 1) / qsos.length);
+      progressBar.style.width = percent + '%';
+      progressBar.textContent = percent + '%';
+
+      await new Promise(r => setTimeout(r, 250)); // throttle API calls
     }
+
+    progressContainer.style.display = 'none';
+
+    const firstValid = qsos.find(q => q.locator !== 'Inconnu');
+    if(firstValid){
+      let centerPos = null;
+      if(firstValid.dx_latitude != null && firstValid.dx_longitude != null)
+        centerPos = {lat: firstValid.dx_latitude, lon: firstValid.dx_longitude};
+      else if(firstValid.locator)
+        centerPos = locatorToLatLon(firstValid.locator);
+      if(centerPos) map.setView([centerPos.lat, centerPos.lon], 6);
+    }
+
+    info.textContent = `QSO détectés : ${qsos.length} — QSO géolocalisés : ${localizedCount}`;
   });
 </script>
-
 </body>
 </html>
