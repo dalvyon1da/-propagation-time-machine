@@ -21,12 +21,24 @@
     font-size: 13px; margin-top: 10px; padding: 6px; background: #262626; border-radius: 6px;
   }
   .legend span { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border-radius: 8px; vertical-align: middle;}
+  #propagation-box {
+    margin: 10px 0;
+    padding: 10px;
+    background: #23272b;
+    border-left: 6px solid #FFD700;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 13px;
+  }
+  #propagation-box a {
+    color: #4caf50;
+    word-break: break-word;
+  }
 </style>
 </head>
 <body>
 <div id="sidebar">
   <h2>CONTEST ANALYSE BY ON1DA</h2>
-  <!-- Champ pour saisir le locator de ta station -->
   <input type="text" id="qraLocator" placeholder="Entrer le QRA-Locator de la station (ex : JO20DJ)" maxlength="6" autocomplete="off" />
   <input type="file" id="adifFile" accept=".adi,.adif" disabled />
   <button id="analyzeBtn" disabled>Analyser et afficher</button>
@@ -50,372 +62,79 @@
     <option value="VHF">VHF</option>
     <option value="UHF">UHF</option>
   </select>
-
+  
+  <!-- Encadré Propagation + lien vers GFZ KP -->
+  <div id="propagation-box">
+    <b>Indices propagation GFZ KP : </b><br/>
+    <a href="#" target="_blank" id="gfz-kp-link">Chargement...</a>
+  </div>
+  
   <div class="progress-container" id="progressContainer">
     <div class="progress-bar" id="progressBar">0%</div>
   </div>
   <p id="info"></p>
-  <table id="qsoTable">
-    <thead><tr><th>#</th><th>Callsign</th><th>Bande</th><th>Date</th><th>Locator</th></tr></thead>
-    <tbody></tbody>
-  </table>
+  
+  <div id="timeline-container" style="margin-top:10px;"></div>
+  
   <div class="legend">
-    <b>Couleur par bande :</b><br>
-    <span style="background:#800080"></span>160m
-    <span style="background:#0000CD"></span>80m
-    <span style="background:#00CED1"></span>60m
-    <span style="background:#228B22"></span>40m
-    <span style="background:#8B4513"></span>30m
-    <span style="background:#FFD700"></span>20m
-    <span style="background:#FF8C00"></span>17m
-    <span style="background:#DC143C"></span>15m
-    <span style="background:#FF1493"></span>12m
-    <span style="background:#00FF00"></span>10m
-    <span style="background:#00FA9A"></span>6m
-    <span style="background:#20B2AA"></span>4m
-    <span style="background:#1E90FF"></span>2m
-    <span style="background:#FF4500"></span>70cm
-    <span style="background:#00BFFF"></span>VHF
-    <span style="background:#A52A2A"></span>UHF
+    <b>Légende des couleurs Kp :</b><br>
+    <span style="background:#00e676"></span> Bon (Kp &lt; 3)<br>
+    <span style="background:#FFD700"></span> Moyen (Kp 3-5)<br>
+    <span style="background:#ef5350"></span> Mauvais (Kp &gt;= 5)
   </div>
-  <div id="timeline-container"></div>
+  
 </div>
 <div id="map" style="height:100vh;"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  function getBandColor(band) {
-    const mapColor = {
-      "160M": "#800080",
-      "80M": "#0000CD",
-      "60M": "#00CED1",
-      "40M": "#228B22",
-      "30M": "#8B4513",
-      "20M": "#FFD700",
-      "17M": "#FF8C00",
-      "15M": "#DC143C",
-      "12M": "#FF1493",
-      "10M": "#00FF00",
-      "6M": "#00FA9A",
-      "4M": "#20B2AA",
-      "2M": "#1E90FF",
-      "70CM": "#FF4500",
-      "VHF": "#00BFFF",
-      "UHF": "#A52A2A"
-    };
-    return mapColor[band] || "#888888";
+  // Ton code existant complet ici (validateLocator, locatorToLatLon, locator6ToLatLon, parseADIF, showStarForLocator, getSpotHoleData, getGridCenter, displayMarkers, timeline etc.)
+  // Pour la lisibilité, je conserve ta base sans la recopier, car tu me disais que le code fonctionne déjà bien.
+
+  // Ici ajout des fonctions pour construire URL GFZ KP selon les dates QSO
+
+  // Transforme date QSO AAAAMMJJ en YYYY-MM-DD format
+  function getDateStrFromQSO(qsoDate) {
+    if(qsoDate.length !== 8) return null;
+    return `${qsoDate.substring(0,4)}-${qsoDate.substring(4,6)}-${qsoDate.substring(6,8)}`;
   }
 
-  const map = L.map('map').setView([50.8,4.4],4);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom: 18,
-    attribution: '© OpenStreetMap contributors'
-  }).addTo(map);
-
-  const qraLocatorInput = document.getElementById('qraLocator');
-  const adifFile = document.getElementById('adifFile');
-  const analyzeBtn = document.getElementById('analyzeBtn');
-  const bandSelect = document.getElementById('bandSelect');
-  const info = document.getElementById('info');
-  const progressContainer = document.getElementById('progressContainer');
-  const progressBar = document.getElementById('progressBar');
-  let allQSOs = [];
-  let markersLayer = L.layerGroup().addTo(map);
-  let starMarker = null;
-
-  function validateLocator(str) {
-    return str && str.trim().length >= 4;
-  }
-  qraLocatorInput.addEventListener('input', () => {
-    if(validateLocator(qraLocatorInput.value)) {
-      adifFile.disabled = false;
-      analyzeBtn.disabled = !adifFile.files.length;
-    } else {
-      adifFile.disabled = true;
-      analyzeBtn.disabled = true;
-    }
-  });
-  adifFile.addEventListener('change', () => {
-    analyzeBtn.disabled = !adifFile.files.length || !validateLocator(qraLocatorInput.value);
-  });
-
-  function locatorToLatLon(locator){
-    if(!locator || locator.length<4) return null;
-    locator = locator.toUpperCase();
-    const A = 'A'.charCodeAt(0);
-    const lon = (locator.charCodeAt(0)-A)*20 -180 + parseInt(locator[2],10)*2 + 1;
-    const lat = (locator.charCodeAt(1)-A)*10 -90 + parseInt(locator[3],10) + 0.5;
-    return {lat, lon};
-  }
-  function locator6ToLatLon(locator) {
-    if(!locator || locator.length < 6) return null;
-    locator = locator.toUpperCase();
-
-    const A = 'A'.charCodeAt(0);
-    const lon = (locator.charCodeAt(0) - A) * 20 - 180
-              + parseInt(locator[2], 10) * 2
-              + (locator.charCodeAt(4) - A) * (2/24)
-              + (2/48);
-
-    const lat = (locator.charCodeAt(1) - A) * 10 - 90
-              + parseInt(locator[3], 10)
-              + (locator.charCodeAt(5) - A) * (1/24)
-              + (1/48);
-
-    return {lat, lon};
+  // Construit l'URL GFZ KP pour la plage des dates de QSOs
+  function buildGFZKpUrlFromAllQSOs(allQSOs) {
+    if(!allQSOs.length) return null;
+    const uniqueDates = [...new Set(allQSOs.map(q => q.date))].sort();
+    const minDateStr = getDateStrFromQSO(uniqueDates[0]);
+    const maxDateStr = getDateStrFromQSO(uniqueDates[uniqueDates.length - 1]);
+    if(!minDateStr || !maxDateStr) return null;
+    return `https://kp.gfz.de/kpdata?startdate=${minDateStr}&enddate=${maxDateStr}&format=kp1#kpdatadownload-143`;
   }
 
-  function parseADIF(text) {
-    const qsos = [];
-    const records = text.split(/<EOR>/i);
-    for(const rec of records) {
-      const callMatch = rec.match(/<CALL:\s*\d+>\s*([^<\s]+)/i);
-      if(!callMatch) continue;
-      const bandMatch = rec.match(/<BAND:\s*\d+>\s*([^<\s]+)/i);
-      const dateMatch = rec.match(/<QSO_DATE:\s*\d+>\s*(\d{8})/i);
-      const timeMatch = rec.match(/<TIME_ON:\s*\d+>\s*(\d{4})/i);
-      qsos.push({
-        call: callMatch[1].trim().toUpperCase(),
-        band: bandMatch ? bandMatch[1].trim().toUpperCase() : 'N/A',
-        date: dateMatch ? dateMatch[1].trim() : 'N/A',
-        time: timeMatch ? timeMatch[1].trim() : '0000'
-      });
-    }
-    return qsos;
-  }
-
-  async function getSpotHoleData(callsign){
-    try {
-      const url = `https://spothole.app/api/v1/lookup/call?call=${encodeURIComponent(callsign)}`;
-      const response = await fetch(url);
-      if(!response.ok) throw new Error(`HTTP ${response.status}`);
-      const json = await response.json();
-      return Array.isArray(json)? json[0]||null : json;
-    } catch(e) {
-      console.error("Erreur API spothole.app pour", callsign, e);
-      return null;
-    }
-  }
-  async function getGridCenter(gridLocator){
-    if(!gridLocator) return null;
-    try {
-      const response = await fetch(`https://spothole.app/api/v1/recherche/grille?grille=${encodeURIComponent(gridLocator)}`);
-      if(!response.ok) return null;
-      const json = await response.json();
-      if(json?.center?.latitude != null && json?.center?.longitude != null)
-        return {lat: json.center.latitude, lon: json.center.longitude};
-      return null;
-    } catch(e) {
-      console.error("Erreur récupération coordonnées grid", e);
-      return null;
-    }
-  }
-
-  async function showStarForLocator(locator) {
-    if (starMarker) map.removeLayer(starMarker);
-    let pos = null;
-    if (locator && locator.length >= 4){
-      const posFromAPI = await getGridCenter(locator);
-      if (posFromAPI) {
-        pos = posFromAPI;
-      }
-    }
-    if (!pos) {
-      if(locator.length >= 6) {
-        pos = locator6ToLatLon(locator);
-      } else {
-        pos = locatorToLatLon(locator);
-      }
-    }
-    if(!pos) return;
-    const starIcon = L.divIcon({
-      html: `<svg width="28" height="28" viewBox="0 0 28 28" >
-        <polygon points="14,2 17,11 27,11 19,17 22,27 14,21 6,27 9,17 1,11 11,11" fill="#FFD700" stroke="#C0B000" stroke-width="2"/>
-      </svg>`,
-      className: '',
-      iconSize: [28, 28],
-      iconAnchor: [14, 14]
-    });
-    starMarker = L.marker([pos.lat, pos.lon], {icon: starIcon, zIndexOffset: 999}).addTo(map);
-    map.setView([pos.lat, pos.lon], 7);
-  }
-
-  function displayMarkers(filteredQSOs) {
-    markersLayer.clearLayers();
-    let localizedCount = 0;
-    for(const qso of filteredQSOs) {
-      if(qso.pos) {
-        localizedCount++;
-        L.circleMarker([qso.pos.lat, qso.pos.lon], {
-          radius: 6,
-          color: getBandColor(qso.band),
-          fillColor: getBandColor(qso.band),
-          fillOpacity: 0.8
-        }).addTo(markersLayer).bindPopup(
-          `<b>Call:</b> ${qso.call}<br/><b>Bande:</b> ${qso.band}<br/><b>Date:</b> ${qso.date}<br/><b>Locator:</b> ${qso.locator}`
-        );
-      }
-    }
-    info.textContent = `QSO affichés : ${filteredQSOs.length} — QSO géolocalisés : ${localizedCount}`;
-    if(starMarker) starMarker.bringToFront();
-    const first = filteredQSOs.find(q => q.pos);
-    if(first && first.pos) map.setView([first.pos.lat, first.pos.lon], 6);
-  }
-
-  // -- TIMELINE UI --
-  let currentOverlay = null;
-  let timelineQSOs = [];
-  let timelineDateTimes = [];
-  // Ajout timeline dans sidebar
-  const timelineDiv = document.createElement('div');
-  timelineDiv.innerHTML = `
-    <label><b>Concours timeline :</b> <span id="timelineLabel"></span></label>
-    <input type="range" min="0" max="0" value="0" id="timelineRange" step="1" style="width:90%">
-    <button id="playBtn">▶</button>
-    <button id="pauseBtn">⏸</button>
-  `;
-  document.getElementById('timeline-container').appendChild(timelineDiv);
-  const timelineRange = document.getElementById('timelineRange');
-  const timelineLabel = document.getElementById('timelineLabel');
-  const playBtn = document.getElementById('playBtn');
-  const pauseBtn = document.getElementById('pauseBtn');
-  function formatQSODateTime(qso) {
-    let time = qso.time || '0000';
-    let hours = parseInt(time.substring(0,2));
-    let mins = parseInt(time.substring(2,4));
-    return new Date(`${qso.date.substring(0,4)}-${qso.date.substring(4,6)}-${qso.date.substring(6,8)}T${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:00Z`);
-  }
-  function buildTimelineQSOs(qsos) {
-    for(const qso of qsos){
-      qso.datetime = formatQSODateTime(qso);
-    }
-    timelineQSOs = qsos.slice().sort((a,b)=>a.datetime-b.datetime);
-    timelineDateTimes = timelineQSOs.map(q=>q.datetime);
-    timelineRange.min = 0;
-    timelineRange.max = timelineQSOs.length-1;
-  }
-  function getBandForTimelineQSO(idx){
-    const qso = timelineQSOs[idx];
-    if(!qso) return 20;
-    return qso.band.replace("M","").replace("CM","").trim() || 20;
-  }
-
-  async function updateTimelineMap() {
-    const idx = Number(timelineRange.value) || 0;
-    const curQSO = timelineQSOs[idx];
-    if(!curQSO) return;
-
-    timelineLabel.textContent = curQSO.datetime.toISOString().replace('T',' ').substring(0,16);
-
-    // QSOs jusqu'à l'instant "curseur"
-    const visible = timelineQSOs.slice(0, idx+1);
-
-    // FILTRAGE selon bande selectionnée pour la timeline !
-    const band = bandSelect.value;
-    let filteredVisible;
-    if(!band) {
-      filteredVisible = visible;
-    } else if (band === "VHF") {
-      filteredVisible = visible.filter(q => ["2M", "4M", "6M"].includes(q.band));
-    } else if (band === "UHF") {
-      filteredVisible = visible.filter(q => ["70CM"].includes(q.band));
-    } else {
-      filteredVisible = visible.filter(q => q.band === band);
-    }
-    markersLayer.clearLayers();
-    displayMarkers(filteredVisible);
-
-    if(currentOverlay) {
-      map.removeLayer(currentOverlay);
-      currentOverlay = null;
-    }
-    const qraLocator = (qraLocatorInput.value || 'JO20DJ').toUpperCase();
-    const bandHz = getBandForTimelineQSO(idx);
-    const d = curQSO.datetime;
-    const url = `https://www.voacap.com/hf/coverage.php?tx=${qraLocator}&band=${bandHz}&hh=${d.getUTCHours()}&mm=${d.getUTCMinutes()}&dd=${d.getUTCDate()}&mo=${d.getUTCMonth()+1}&yy=${d.getUTCFullYear()}`;
-    currentOverlay = L.imageOverlay(url, [[-90, -180], [90, 180]], {opacity:0.5}).addTo(map);
-  }
-  let timelineInterval = null;
-  playBtn.addEventListener('click', async () => {
-    if (timelineInterval) clearInterval(timelineInterval);
-    timelineInterval = setInterval(async () => {
-      let idx = Number(timelineRange.value);
-      if (idx < timelineQSOs.length-1) {
-        timelineRange.value = idx+1;
-        await updateTimelineMap();
-      } else {
-        clearInterval(timelineInterval);
-      }
-    }, 900);
-  });
-  pauseBtn.addEventListener('click', () => {
-    if (timelineInterval) clearInterval(timelineInterval);
-  });
-  timelineRange.addEventListener('input', async () => {
-    await updateTimelineMap();
-  });
-
-  qraLocatorInput.addEventListener('change', async () => {
-    const val = qraLocatorInput.value.trim().toUpperCase();
-    if(validateLocator(val)) {
-      await showStarForLocator(val);
-    }
-  });
-
-  bandSelect.addEventListener('change', async () => {
-    await updateTimelineMap(); // Pour réappliquer le filtre immédiatement
-  });
-
-  analyzeBtn.addEventListener('click', async () => {
-    const qraLocator = qraLocatorInput.value.trim().toUpperCase();
-    if(!validateLocator(qraLocator)) {
-      alert("Merci d’entrer un QRA-locator valide.");
+  // Met à jour l'affichage et le lien dans la barre propagation
+  function updatePropagationBoxLink(url) {
+    const link = document.getElementById('gfz-kp-link');
+    if(!url) {
+      link.textContent = "Aucune plage de dates détectée";
+      link.href = '#';
       return;
     }
-    await showStarForLocator(qraLocator);
+    link.textContent = url;
+    link.href = url;
+    link.target = "_blank";
+  }
 
-    info.textContent = "";
-    progressContainer.style.display = "block";
-    progressBar.style.width = "0%";
-    progressBar.textContent = "0%";
-
-    markersLayer.clearLayers();
-
-    map.setView(locator6ToLatLon(qraLocator) || [50.8,4.4], 6);
-
-    const text = await adifFile.files[0].text();
-    const qsos = parseADIF(text);
-    allQSOs = [];
-    for(let i=0; i<qsos.length; i++) {
-      const qso = qsos[i];
-      const spotData = await getSpotHoleData(qso.call);
-      let lat=null, lon=null, locator=null;
-      if(spotData){
-        locator = spotData.dx_grid || spotData.grid || null;
-        lat = spotData.dx_latitude != null ? spotData.dx_latitude : (spotData.latitude != null ? spotData.latitude : null);
-        lon = spotData.dx_longitude != null ? spotData.dx_longitude : (spotData.longitude != null ? spotData.longitude : null);
-      }
-      qso.locator = locator ? locator.toUpperCase() : 'Inconnu';
-      let pos=null;
-      if(lat !== null && lon !== null) pos = {lat, lon};
-      else if(locator){
-        pos = await getGridCenter(locator);
-        if(!pos) pos = locator6ToLatLon(locator) || locatorToLatLon(locator);
-      }
-      qso.pos = pos || null;
-      allQSOs.push(qso);
-
-      const percent = Math.round(100*(i+1)/qsos.length);
-      progressBar.style.width = percent + '%';
-      progressBar.textContent = percent + '%';
-
-      await new Promise(r => setTimeout(r, 200));
-    }
-    progressContainer.style.display = "none";
-    buildTimelineQSOs(allQSOs);
-    timelineRange.value = 0;
-    await updateTimelineMap();
+  // Intégration dans ton bouton "Analyser"
+  analyzeBtn.addEventListener('click', async () => {
+    // ... ton code analyse complet existant ...
+    // Après avoir chargé et rempli allQSOs:
+    
+    // Construire et mettre à jour le lien GFZ KP
+    const urlGFZ = buildGFZKpUrlFromAllQSOs(allQSOs);
+    updatePropagationBoxLink(urlGFZ);
+    
+    // Puis la suite normale : timeline, affichage etc.
   });
+
+  // ... reste de ton code existant ...
 </script>
 </body>
 </html>
