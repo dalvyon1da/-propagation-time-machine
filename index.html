@@ -54,14 +54,11 @@
   <div class="progress-container" id="progressContainer">
     <div class="progress-bar" id="progressBar">0%</div>
   </div>
-
   <p id="info"></p>
-
   <table id="qsoTable">
     <thead><tr><th>#</th><th>Callsign</th><th>Bande</th><th>Date</th><th>Locator</th></tr></thead>
     <tbody></tbody>
   </table>
-  
   <div class="legend">
     <b>Couleur par bande :</b><br>
     <span style="background:#800080"></span>160m
@@ -81,12 +78,12 @@
     <span style="background:#00BFFF"></span>VHF
     <span style="background:#A52A2A"></span>UHF
   </div>
+  <div id="timeline-container"></div>
 </div>
 <div id="map" style="height:100vh;"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  // Couleurs par bande
   function getBandColor(band) {
     const mapColor = {
       "160M": "#800080",
@@ -109,7 +106,6 @@
     return mapColor[band] || "#888888";
   }
 
-  // Init carte
   const map = L.map('map').setView([50.8,4.4],4);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     maxZoom: 18,
@@ -123,12 +119,10 @@
   const info = document.getElementById('info');
   const progressContainer = document.getElementById('progressContainer');
   const progressBar = document.getElementById('progressBar');
-  const tbody = document.querySelector('#qsoTable tbody');
   let allQSOs = [];
   let markersLayer = L.layerGroup().addTo(map);
   let starMarker = null;
 
-  // Activer input fichier et bouton après saisie locator valide
   function validateLocator(str) {
     return str && str.trim().length >= 4;
   }
@@ -145,7 +139,6 @@
     analyzeBtn.disabled = !adifFile.files.length || !validateLocator(qraLocatorInput.value);
   });
 
-  // Conversion locator 4 caractères en lat/lon approximative
   function locatorToLatLon(locator){
     if(!locator || locator.length<4) return null;
     locator = locator.toUpperCase();
@@ -154,8 +147,6 @@
     const lat = (locator.charCodeAt(1)-A)*10 -90 + parseInt(locator[3],10) + 0.5;
     return {lat, lon};
   }
-
-  // Conversion locator 6 caractères pour meilleure précision
   function locator6ToLatLon(locator) {
     if(!locator || locator.length < 6) return null;
     locator = locator.toUpperCase();
@@ -174,7 +165,6 @@
     return {lat, lon};
   }
 
-  // Parsing ADIF avec extraction temps
   function parseADIF(text) {
     const qsos = [];
     const records = text.split(/<EOR>/i);
@@ -194,7 +184,6 @@
     return qsos;
   }
 
-  // Récupérer info spots depuis spothole.app par indicatif
   async function getSpotHoleData(callsign){
     try {
       const url = `https://spothole.app/api/v1/lookup/call?call=${encodeURIComponent(callsign)}`;
@@ -207,8 +196,6 @@
       return null;
     }
   }
-
-  // Récupérer coordonnées du locator via spothole.app
   async function getGridCenter(gridLocator){
     if(!gridLocator) return null;
     try {
@@ -224,18 +211,15 @@
     }
   }
 
-  // Afficher l'étoile pour le locator station saisi, avec priorité API puis décodage 6 chars, puis 4 chars
   async function showStarForLocator(locator) {
     if (starMarker) map.removeLayer(starMarker);
     let pos = null;
-
     if (locator && locator.length >= 4){
       const posFromAPI = await getGridCenter(locator);
       if (posFromAPI) {
         pos = posFromAPI;
       }
     }
-
     if (!pos) {
       if(locator.length >= 6) {
         pos = locator6ToLatLon(locator);
@@ -244,7 +228,6 @@
       }
     }
     if(!pos) return;
-
     const starIcon = L.divIcon({
       html: `<svg width="28" height="28" viewBox="0 0 28 28" >
         <polygon points="14,2 17,11 27,11 19,17 22,27 14,21 6,27 9,17 1,11 11,11" fill="#FFD700" stroke="#C0B000" stroke-width="2"/>
@@ -253,12 +236,10 @@
       iconSize: [28, 28],
       iconAnchor: [14, 14]
     });
-
     starMarker = L.marker([pos.lat, pos.lon], {icon: starIcon, zIndexOffset: 999}).addTo(map);
     map.setView([pos.lat, pos.lon], 7);
   }
 
-  // Afficher marqueurs QSOs
   function displayMarkers(filteredQSOs) {
     markersLayer.clearLayers();
     let localizedCount = 0;
@@ -281,27 +262,11 @@
     if(first && first.pos) map.setView([first.pos.lat, first.pos.lon], 6);
   }
 
-  bandSelect.addEventListener('change', () => {
-    if(!allQSOs.length) return;
-    const band = bandSelect.value;
-    let filter;
-    if(!band) filter = allQSOs;
-    else if(band === "VHF") filter = allQSOs.filter(q => ["2M", "4M", "6M"].includes(q.band));
-    else if(band === "UHF") filter = allQSOs.filter(q => ["70CM"].includes(q.band));
-    else filter = allQSOs.filter(q => q.band === band);
-    displayMarkers(filter);
-  });
-
-  // Gestionnaire de saisie locator station
-  qraLocatorInput.addEventListener('change', async () => {
-    const val = qraLocatorInput.value.trim().toUpperCase();
-    if(validateLocator(val)) {
-      await showStarForLocator(val);
-    }
-  });
-
-  // === Timeline UI ===
-
+  // -- TIMELINE UI --
+  let currentOverlay = null;
+  let timelineQSOs = [];
+  let timelineDateTimes = [];
+  // Ajout timeline dans sidebar
   const timelineDiv = document.createElement('div');
   timelineDiv.innerHTML = `
     <label><b>Concours timeline :</b> <span id="timelineLabel"></span></label>
@@ -309,25 +274,17 @@
     <button id="playBtn">▶</button>
     <button id="pauseBtn">⏸</button>
   `;
-  document.getElementById('sidebar').appendChild(timelineDiv);
-
+  document.getElementById('timeline-container').appendChild(timelineDiv);
   const timelineRange = document.getElementById('timelineRange');
   const timelineLabel = document.getElementById('timelineLabel');
   const playBtn = document.getElementById('playBtn');
   const pauseBtn = document.getElementById('pauseBtn');
-
-  // Ces 2 utilitaires sont pour parser heure/minute
   function formatQSODateTime(qso) {
     let time = qso.time || '0000';
     let hours = parseInt(time.substring(0,2));
     let mins = parseInt(time.substring(2,4));
     return new Date(`${qso.date.substring(0,4)}-${qso.date.substring(4,6)}-${qso.date.substring(6,8)}T${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:00Z`);
   }
-
-  let currentOverlay = null;
-  let timelineQSOs = [];
-  let timelineDateTimes = [];
-
   function buildTimelineQSOs(qsos) {
     for(const qso of qsos){
       qso.datetime = formatQSODateTime(qso);
@@ -337,10 +294,9 @@
     timelineRange.min = 0;
     timelineRange.max = timelineQSOs.length-1;
   }
-
   function getBandForTimelineQSO(idx){
     const qso = timelineQSOs[idx];
-    if(!qso) return 20; // défaut 20m
+    if(!qso) return 20;
     return qso.band.replace("M","").replace("CM","").trim() || 20;
   }
 
@@ -351,24 +307,34 @@
 
     timelineLabel.textContent = curQSO.datetime.toISOString().replace('T',' ').substring(0,16);
 
+    // QSOs jusqu'à l'instant "curseur"
     const visible = timelineQSOs.slice(0, idx+1);
+
+    // FILTRAGE selon bande selectionnée pour la timeline !
+    const band = bandSelect.value;
+    let filteredVisible;
+    if(!band) {
+      filteredVisible = visible;
+    } else if (band === "VHF") {
+      filteredVisible = visible.filter(q => ["2M", "4M", "6M"].includes(q.band));
+    } else if (band === "UHF") {
+      filteredVisible = visible.filter(q => ["70CM"].includes(q.band));
+    } else {
+      filteredVisible = visible.filter(q => q.band === band);
+    }
     markersLayer.clearLayers();
-    displayMarkers(visible);
+    displayMarkers(filteredVisible);
 
     if(currentOverlay) {
       map.removeLayer(currentOverlay);
       currentOverlay = null;
     }
-
     const qraLocator = (qraLocatorInput.value || 'JO20DJ').toUpperCase();
     const bandHz = getBandForTimelineQSO(idx);
-
     const d = curQSO.datetime;
     const url = `https://www.voacap.com/hf/coverage.php?tx=${qraLocator}&band=${bandHz}&hh=${d.getUTCHours()}&mm=${d.getUTCMinutes()}&dd=${d.getUTCDate()}&mo=${d.getUTCMonth()+1}&yy=${d.getUTCFullYear()}`;
-    
     currentOverlay = L.imageOverlay(url, [[-90, -180], [90, 180]], {opacity:0.5}).addTo(map);
   }
-
   let timelineInterval = null;
   playBtn.addEventListener('click', async () => {
     if (timelineInterval) clearInterval(timelineInterval);
@@ -382,13 +348,22 @@
       }
     }, 900);
   });
-
   pauseBtn.addEventListener('click', () => {
     if (timelineInterval) clearInterval(timelineInterval);
   });
-
   timelineRange.addEventListener('input', async () => {
     await updateTimelineMap();
+  });
+
+  qraLocatorInput.addEventListener('change', async () => {
+    const val = qraLocatorInput.value.trim().toUpperCase();
+    if(validateLocator(val)) {
+      await showStarForLocator(val);
+    }
+  });
+
+  bandSelect.addEventListener('change', async () => {
+    await updateTimelineMap(); // Pour réappliquer le filtre immédiatement
   });
 
   analyzeBtn.addEventListener('click', async () => {
@@ -410,7 +385,6 @@
 
     const text = await adifFile.files[0].text();
     const qsos = parseADIF(text);
-
     allQSOs = [];
     for(let i=0; i<qsos.length; i++) {
       const qso = qsos[i];
@@ -435,10 +409,9 @@
       progressBar.style.width = percent + '%';
       progressBar.textContent = percent + '%';
 
-      await new Promise(r => setTimeout(r, 250));
+      await new Promise(r => setTimeout(r, 200));
     }
     progressContainer.style.display = "none";
-    bandSelect.dispatchEvent(new Event('change'));
     buildTimelineQSOs(allQSOs);
     timelineRange.value = 0;
     await updateTimelineMap();
