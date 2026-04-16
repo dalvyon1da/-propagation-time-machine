@@ -145,6 +145,7 @@
     analyzeBtn.disabled = !adifFile.files.length || !validateLocator(qraLocatorInput.value);
   });
 
+  // Conversion locator 4 caractères en lat/lon approximative
   function locatorToLatLon(locator){
     if(!locator || locator.length<4) return null;
     locator = locator.toUpperCase();
@@ -154,6 +155,26 @@
     return {lat, lon};
   }
 
+  // Conversion locator 6 caractères pour meilleure précision
+  function locator6ToLatLon(locator) {
+    if(!locator || locator.length < 6) return null;
+    locator = locator.toUpperCase();
+
+    const A = 'A'.charCodeAt(0);
+    const lon = (locator.charCodeAt(0) - A) * 20 - 180
+              + parseInt(locator[2], 10) * 2
+              + (locator.charCodeAt(4) - A) * (2/24)
+              + (2/48);
+
+    const lat = (locator.charCodeAt(1) - A) * 10 - 90
+              + parseInt(locator[3], 10)
+              + (locator.charCodeAt(5) - A) * (1/24)
+              + (1/48);
+
+    return {lat, lon};
+  }
+
+  // Parsing ADIF
   function parseADIF(text) {
     const qsos = [];
     const records = text.split(/<EOR>/i);
@@ -171,6 +192,7 @@
     return qsos;
   }
 
+  // Récupérer info spots depuis spothole.app par indicatif
   async function getSpotHoleData(callsign){
     try {
       const url = `https://spothole.app/api/v1/lookup/call?call=${encodeURIComponent(callsign)}`;
@@ -184,6 +206,7 @@
     }
   }
 
+  // Récupérer coordonnées du locator via spothole.app
   async function getGridCenter(gridLocator){
     if(!gridLocator) return null;
     try {
@@ -199,21 +222,24 @@
     }
   }
 
+  // Afficher l'étoile pour le locator station saisi, avec priorité API puis décodage 6 chars, puis 4 chars
   async function showStarForLocator(locator) {
     if (starMarker) map.removeLayer(starMarker);
     let pos = null;
 
-    // Appel API spothole.app uniquement si locator a au moins 4 caractères
-    if(locator && locator.length >= 4){
+    if (locator && locator.length >= 4){
       const posFromAPI = await getGridCenter(locator);
-      if(posFromAPI) {
+      if (posFromAPI) {
         pos = posFromAPI;
       }
     }
 
-    // Si pas de position obtenue par API, on calcule localement avec 4 premiers chars
-    if(!pos) {
-      pos = locatorToLatLon(locator);
+    if (!pos) {
+      if(locator.length >= 6) {
+        pos = locator6ToLatLon(locator);
+      } else {
+        pos = locatorToLatLon(locator);
+      }
     }
     if(!pos) return;
 
@@ -230,14 +256,7 @@
     map.setView([pos.lat, pos.lon], 7);
   }
 
-  // Mise à jour de l'événement change sur input QRA Locator pour utiliser la nouvelle fonction
-  qraLocatorInput.addEventListener('change', async () => {
-    const val = qraLocatorInput.value.trim().toUpperCase();
-    if(validateLocator(val)) {
-      await showStarForLocator(val);
-    }
-  });
-
+  // Afficher marqueurs QSOs
   function displayMarkers(filteredQSOs) {
     markersLayer.clearLayers();
     let localizedCount = 0;
@@ -271,6 +290,15 @@
     displayMarkers(filter);
   });
 
+  // Gestionnaire de saisie locator station
+  qraLocatorInput.addEventListener('change', async () => {
+    const val = qraLocatorInput.value.trim().toUpperCase();
+    if(validateLocator(val)) {
+      await showStarForLocator(val);
+    }
+  });
+
+  // Bouton analyser ADIF
   analyzeBtn.addEventListener('click', async () => {
     const qraLocator = qraLocatorInput.value.trim().toUpperCase();
     if(!validateLocator(qraLocator)) {
@@ -286,7 +314,7 @@
 
     markersLayer.clearLayers();
 
-    map.setView(locatorToLatLon(qraLocator) || [50.8,4.4], 6);
+    map.setView(locator6ToLatLon(qraLocator) || [50.8,4.4], 6);
 
     const text = await adifFile.files[0].text();
     const qsos = parseADIF(text);
@@ -306,7 +334,7 @@
       if(lat !== null && lon !== null) pos = {lat, lon};
       else if(locator){
         pos = await getGridCenter(locator);
-        if(!pos) pos = locatorToLatLon(locator);
+        if(!pos) pos = locator6ToLatLon(locator) || locatorToLatLon(locator);
       }
       qso.pos = pos || null;
       allQSOs.push(qso);
