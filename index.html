@@ -491,8 +491,6 @@ async function fetchPropagation(minDate, maxDate) {
     console.error("Erreur propagation :", e);
     return null;
   }
-}
-
 
 function evaluatePropagation(kp) {
   if (kp <= 2) return {text: "Bonne propagation", color: "lime"};
@@ -501,28 +499,28 @@ function evaluatePropagation(kp) {
 }
 
 function displayPropagation(data) {
-  const box = document.getElementById("propagationStatus");
+    const box = document.getElementById("propagationStatus");
 
-  if (!data || !data.length) {
-    box.innerHTML = "Impossible de récupérer les indices.";
-    box.style.color = "red";
-    return;
-  }
+    if (!data) {
+        box.innerHTML = "Impossible de récupérer les indices.";
+        box.style.color = "red";
+        return;
+    }
 
-  const last = data[data.length - 1];
+    const K = data.K || "?";
+    const Kp = data.Kp || "?";
+    const A = data.A || "?";
 
-  const K = last.K || "?";
-  const Kp = last.Kp || "?";
-  const A = last.A || "?";
+    const evalP = evaluatePropagation(parseFloat(Kp));
 
-  const evalP = evaluatePropagation(Kp);
+    box.innerHTML = `
+        <b>K :</b> ${K}<br>
+        <b>Kp :</b> ${Kp}<br>
+        <b>A :</b> ${A}<br>
+        <b>${evalP.text}</b>
+    `;
 
-  box.innerHTML = `
-    <b>K :</b> ${K}<br>
-    <b>Kp :</b> ${Kp}<br>
-    <b>A :</b> ${A}<br><br>
-    <span style="color:${evalP.color}; font-weight:bold;">${evalP.text}</span>
-  `;
+    box.style.color = evalP.color;
 }
 
 
