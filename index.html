@@ -268,7 +268,9 @@ function displayMarkers(filteredQSOs) {
     }
   }
   info.textContent = `QSO affichés : ${filteredQSOs.length} — QSO géolocalisés : ${localizedCount}`;
-  if(starMarker) starMarker.bringToFront();
+  if (starMarker && starMarker._icon) {
+    starMarker._icon.style.zIndex = 9999;
+}
   const first = filteredQSOs.find(q => q.pos);
   if(first && first.pos) map.setView([first.pos.lat, first.pos.lon], 6);
 }
