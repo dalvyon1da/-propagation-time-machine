@@ -491,7 +491,7 @@ async function fetchPropagation(minDate, maxDate) {
     console.error("Erreur propagation :", e);
     return null;
   }
-
+}
 function evaluatePropagation(kp) {
   if (kp <= 2) return {text: "Bonne propagation", color: "lime"};
   if (kp <= 4) return {text: "Propagation moyenne", color: "orange"};
