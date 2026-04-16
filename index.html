@@ -200,12 +200,23 @@
   }
 
   async function showStarForLocator(locator) {
-    if(starMarker) map.removeLayer(starMarker);
-    const posFromAPI = await getGridCenter(locator);
+    if (starMarker) map.removeLayer(starMarker);
     let pos = null;
-    if(posFromAPI) pos = posFromAPI;
-    else pos = locatorToLatLon(locator);
+
+    // Appel API spothole.app uniquement si locator a au moins 4 caractères
+    if(locator && locator.length >= 4){
+      const posFromAPI = await getGridCenter(locator);
+      if(posFromAPI) {
+        pos = posFromAPI;
+      }
+    }
+
+    // Si pas de position obtenue par API, on calcule localement avec 4 premiers chars
+    if(!pos) {
+      pos = locatorToLatLon(locator);
+    }
     if(!pos) return;
+
     const starIcon = L.divIcon({
       html: `<svg width="28" height="28" viewBox="0 0 28 28" >
         <polygon points="14,2 17,11 27,11 19,17 22,27 14,21 6,27 9,17 1,11 11,11" fill="#FFD700" stroke="#C0B000" stroke-width="2"/>
@@ -214,9 +225,18 @@
       iconSize: [28, 28],
       iconAnchor: [14, 14]
     });
+
     starMarker = L.marker([pos.lat, pos.lon], {icon: starIcon, zIndexOffset: 999}).addTo(map);
-    map.setView([pos.lat, pos.lon],7);
+    map.setView([pos.lat, pos.lon], 7);
   }
+
+  // Mise à jour de l'événement change sur input QRA Locator pour utiliser la nouvelle fonction
+  qraLocatorInput.addEventListener('change', async () => {
+    const val = qraLocatorInput.value.trim().toUpperCase();
+    if(validateLocator(val)) {
+      await showStarForLocator(val);
+    }
+  });
 
   function displayMarkers(filteredQSOs) {
     markersLayer.clearLayers();
@@ -249,13 +269,6 @@
     else if(band === "UHF") filter = allQSOs.filter(q => ["70CM"].includes(q.band));
     else filter = allQSOs.filter(q => q.band === band);
     displayMarkers(filter);
-  });
-
-  qraLocatorInput.addEventListener('change', () => {
-    const val = qraLocatorInput.value.trim().toUpperCase();
-    if(validateLocator(val)) {
-      showStarForLocator(val);
-    }
   });
 
   analyzeBtn.addEventListener('click', async () => {
