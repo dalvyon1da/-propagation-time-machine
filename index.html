@@ -514,11 +514,11 @@ function displayPropagation(data) {
     const evalP = evaluatePropagation(parseFloat(Kp));
 
     box.innerHTML = `
-        <b>K :</b> ${K}<br>
-        <b>Kp :</b> ${Kp}<br>
-        <b>A :</b> ${A}<br>
-        <b>${evalP.text}</b>
-    `;
+    <b>K :</b> ${K}<br>
+    <b>Kp :</b> ${Kp}<br>
+    <b>A :</b> ${A}<br>
+    <b>${evalP.text}</b>
+`;
 
     box.style.color = evalP.color;
 }
