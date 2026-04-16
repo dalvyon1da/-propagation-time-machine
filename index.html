@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
@@ -348,122 +348,113 @@
     progressContainer.style.display = "none";
     bandSelect.dispatchEvent(new Event('change'));
   });
-  // Fonction pour récupérer le SFI à partir de la date AAAAMMJJ
-async function getDailySFI(dateStr) {
-  try {
-    const resp = await fetch('https://services.swpc.noaa.gov/text/daily-solar-indices.txt');
-    const text = await resp.text();
-    const lines = text.split('\n');
-    for (const line of lines) {
-      // Chaque ligne commence par la date AAAAMMJJ
-      if (line.startsWith(dateStr)) {
-        const tokens = line.trim().split(/\s+/);
-        // Le 8e token (index 7) correspond au SFI selon la spécification NOAA
-        if (tokens.length > 7) {
-          const sfi = parseFloat(tokens[7]);
-          if (!isNaN(sfi)) {
-            return sfi;
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Erreur lors de la récupération du SFI:', e);
-  }
-  return null;
+  // === Timeline UI ===
+
+const timelineDiv = document.createElement('div');
+timelineDiv.innerHTML = `
+  <label><b>Concours timeline :</b> <span id="timelineLabel"></span></label>
+  <input type="range" min="0" max="0" value="0" id="timelineRange" step="1" style="width:90%">
+  <button id="playBtn">▶</button>
+  <button id="pauseBtn">⏸</button>
+`;
+document.getElementById('sidebar').appendChild(timelineDiv);
+
+const timelineRange = document.getElementById('timelineRange');
+const timelineLabel = document.getElementById('timelineLabel');
+const playBtn = document.getElementById('playBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+
+// === Fonctions date et bande ===
+
+// Ces 2 utilitaires sont pour parser heure/minute
+function formatQSODateTime(qso) {
+  let time = qso.time || '0000';
+  let hours = parseInt(time.substring(0,2));
+  let mins = parseInt(time.substring(2,4));
+  return new Date(`${qso.date.substring(0,4)}-${qso.date.substring(4,6)}-${qso.date.substring(6,8)}T${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:00Z`);
 }
 
-// Fonction pour récupérer l'indice Kp à partir de la date AAAAMMJJ
-async function getDailyKp(dateStr) {
-  try {
-    const resp = await fetch('https://services.swpc.noaa.gov/text/daily-geomagnetic-indices.txt');
-    const text = await resp.text();
-    const lines = text.split('\n');
-    for (const line of lines) {
-      if (line.startsWith(dateStr)) {
-        const tokens = line.trim().split(/\s+/);
-        // Dans ce fichier, le Kp quotidien est en position variable; ici on vise le 5e token (index 4)
-        // À vérifier selon mise à jour NOAA, adapter si besoin
-        if (tokens.length > 4) {
-          const kp = parseFloat(tokens[4]);
-          if (!isNaN(kp)) {
-            return kp;
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Erreur lors de la récupération du Kp:', e);
+// Liste des overlays, pour les supprimer facilement à chaque step
+let currentOverlay = null;
+let timelineQSOs = [];
+let timelineDateTimes = [];
+
+// Pour respecter l'ordre chrono
+function buildTimelineQSOs(qsos) {
+  for(const qso of qsos){
+    qso.datetime = formatQSODateTime(qso);
   }
-  return null;
+  timelineQSOs = qsos.slice().sort((a,b)=>a.datetime-b.datetime);
+  timelineDateTimes = timelineQSOs.map(q=>q.datetime);
+  timelineRange.min = 0;
+  timelineRange.max = timelineQSOs.length-1;
 }
 
-// Exemple d'utilisation après avoir chargé le fichier ADIF et extrait les QSOs
-async function fetchAndLogPropagationIndices(allQSOs) {
-  // Extraire les dates uniques (AAAAMMJJ)
-  const uniqueDates = [...new Set(allQSOs.map(q => q.date))];
-  for (const dateStr of uniqueDates) {
-    const sfi = await getDailySFI(dateStr);
-    const kp = await getDailyKp(dateStr);
-    console.log(`Date ${dateStr} — SFI: ${sfi !== null ? sfi : 'N/A'}, Kp: ${kp !== null ? kp : 'N/A'}`);
-    
-    // Ici tu peux appliquer la logique d’ajustement de propagation avec sfi et kp selon ta méthode
-  }
+function getBandForTimelineQSO(idx){
+  const qso = timelineQSOs[idx];
+  return qso.band.replace("M","").replace("CM",""); // pour api voacap (ex: 20, 40, etc.)
 }
 
-// Exemple d’appel dans ton listener d’analyse après lecture fichier ADIF
-analyzeBtn.addEventListener('click', async () => {
-  const qraLocator = qraLocatorInput.value.trim().toUpperCase();
-  if (!validateLocator(qraLocator)) {
-    alert("Merci d’entrer un QRA-locator valide.");
-    return;
-  }
-  await showStarForLocator(qraLocator);
+async function updateTimelineMap() {
+  const idx = Number(timelineRange.value) || 0;
+  const curQSO = timelineQSOs[idx];
+  if(!curQSO) return;
 
-  info.textContent = "";
-  progressContainer.style.display = "block";
-  progressBar.style.width = "0%";
-  progressBar.textContent = "0%";
+  // Label timeline UTC
+  timelineLabel.textContent = curQSO.datetime.toISOString().replace('T',' ').substring(0,16);
 
+  // Affichage des QSOs <= idx
+  const visible = timelineQSOs.slice(0, idx+1);
   markersLayer.clearLayers();
+  displayMarkers(visible);
 
-  const text = await adifFile.files[0].text();
-  const qsos = parseADIF(text);
-  allQSOs = [];
-
-  for (let i = 0; i < qsos.length; i++) {
-    const qso = qsos[i];
-    // récupération spot (inchangée)
-    const spotData = await getSpotHoleData(qso.call);
-    let lat = null, lon = null, locator = null;
-    if (spotData) {
-      locator = spotData.dx_grid || spotData.grid || null;
-      lat = (spotData.dx_latitude != null) ? spotData.dx_latitude : ((spotData.latitude != null) ? spotData.latitude : null);
-      lon = (spotData.dx_longitude != null) ? spotData.dx_longitude : ((spotData.longitude != null) ? spotData.longitude : null);
-    }
-    qso.locator = locator ? locator.toUpperCase() : 'Inconnu';
-    let pos = null;
-    if (lat !== null && lon !== null) pos = { lat, lon };
-    else if (locator) {
-      pos = await getGridCenter(locator);
-      if (!pos) pos = locator6ToLatLon(locator) || locatorToLatLon(locator);
-    }
-    qso.pos = pos || null;
-    allQSOs.push(qso);
-
-    const percent = Math.round(100 * (i + 1) / qsos.length);
-    progressBar.style.width = percent + '%';
-    progressBar.textContent = percent + '%';
-
-    await new Promise(r => setTimeout(r, 250));
+  // Gestion overlay propagation VOACAP
+  if(currentOverlay) {
+    map.removeLayer(currentOverlay);
+    currentOverlay = null;
   }
-  progressContainer.style.display = "none";
-  bandSelect.dispatchEvent(new Event('change'));
 
-  // Récupération automatique des indices et affichage dans la console
-  await fetchAndLogPropagationIndices(allQSOs);
+  // Prends locator station
+  const qraLocator = (qraLocatorInput.value || 'JO20DJ').toUpperCase();
+  const bandHz = getBandForTimelineQSO(idx);
 
-  // Ensuite tu pourras appeler la fonction de traçage des halos de propagation en passant sfi/kp moyens collectés ci-dessus
+  // Construit url voacap (14MHz, 13h UTC, 1 mai 2024 => 14, 13, 1, 5, 2024)
+  const d = curQSO.datetime;
+  const url = `https://www.voacap.com/hf/coverage.php?tx=${qraLocator}&band=${bandHz}&hh=${d.getUTCHours()}&mm=${d.getUTCMinutes()}&dd=${d.getUTCDate()}&mo=${d.getUTCMonth()+1}&yy=${d.getUTCFullYear()}`;
+  // C'est une IMAGE PNG du monde, à mettre en overlay !
+  currentOverlay = L.imageOverlay(url, [[-90, -180], [90, 180]], {opacity:0.5}).addTo(map);
+}
+
+// Animation “play”
+let timelineInterval = null;
+playBtn.addEventListener('click', ()=>{
+  if (timelineInterval) clearInterval(timelineInterval);
+  timelineInterval = setInterval(()=> {
+    let idx = Number(timelineRange.value);
+    if (idx < timelineQSOs.length-1) {
+      timelineRange.value = idx+1;
+      updateTimelineMap();
+    } else {
+      clearInterval(timelineInterval);
+    }
+  }, 900);
+});
+pauseBtn.addEventListener('click', ()=>{
+  if (timelineInterval) clearInterval(timelineInterval);
+});
+
+// Curseur manuel
+timelineRange.addEventListener('input', updateTimelineMap);
+
+// --- Lancer la timeline après avoir chargé les QSOs ---
+
+// Dans ta fonction analyzeBtn.addEventListener('click', ...) ajoute à la toute fin :
+analyzeBtn.addEventListener('click', async () => {
+  // ... (ton code existant)
+  // Juste à la fin (après avoir peuplé allQSOs) :
+  buildTimelineQSOs(allQSOs);
+  timelineRange.value = 0;
+  updateTimelineMap();
 });
 </script>
 </body>
