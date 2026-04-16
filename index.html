@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
@@ -174,7 +174,7 @@
     return {lat, lon};
   }
 
-  // Parsing ADIF
+  // Parsing ADIF avec extraction temps
   function parseADIF(text) {
     const qsos = [];
     const records = text.split(/<EOR>/i);
@@ -183,10 +183,12 @@
       if(!callMatch) continue;
       const bandMatch = rec.match(/<BAND:\s*\d+>\s*([^<\s]+)/i);
       const dateMatch = rec.match(/<QSO_DATE:\s*\d+>\s*(\d{8})/i);
+      const timeMatch = rec.match(/<TIME_ON:\s*\d+>\s*(\d{4})/i);
       qsos.push({
         call: callMatch[1].trim().toUpperCase(),
         band: bandMatch ? bandMatch[1].trim().toUpperCase() : 'N/A',
-        date: dateMatch ? dateMatch[1].trim() : 'N/A'
+        date: dateMatch ? dateMatch[1].trim() : 'N/A',
+        time: timeMatch ? timeMatch[1].trim() : '0000'
       });
     }
     return qsos;
@@ -298,7 +300,97 @@
     }
   });
 
-  // Bouton analyser ADIF
+  // === Timeline UI ===
+
+  const timelineDiv = document.createElement('div');
+  timelineDiv.innerHTML = `
+    <label><b>Concours timeline :</b> <span id="timelineLabel"></span></label>
+    <input type="range" min="0" max="0" value="0" id="timelineRange" step="1" style="width:90%">
+    <button id="playBtn">▶</button>
+    <button id="pauseBtn">⏸</button>
+  `;
+  document.getElementById('sidebar').appendChild(timelineDiv);
+
+  const timelineRange = document.getElementById('timelineRange');
+  const timelineLabel = document.getElementById('timelineLabel');
+  const playBtn = document.getElementById('playBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+
+  // Ces 2 utilitaires sont pour parser heure/minute
+  function formatQSODateTime(qso) {
+    let time = qso.time || '0000';
+    let hours = parseInt(time.substring(0,2));
+    let mins = parseInt(time.substring(2,4));
+    return new Date(`${qso.date.substring(0,4)}-${qso.date.substring(4,6)}-${qso.date.substring(6,8)}T${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:00Z`);
+  }
+
+  let currentOverlay = null;
+  let timelineQSOs = [];
+  let timelineDateTimes = [];
+
+  function buildTimelineQSOs(qsos) {
+    for(const qso of qsos){
+      qso.datetime = formatQSODateTime(qso);
+    }
+    timelineQSOs = qsos.slice().sort((a,b)=>a.datetime-b.datetime);
+    timelineDateTimes = timelineQSOs.map(q=>q.datetime);
+    timelineRange.min = 0;
+    timelineRange.max = timelineQSOs.length-1;
+  }
+
+  function getBandForTimelineQSO(idx){
+    const qso = timelineQSOs[idx];
+    if(!qso) return 20; // défaut 20m
+    return qso.band.replace("M","").replace("CM","").trim() || 20;
+  }
+
+  async function updateTimelineMap() {
+    const idx = Number(timelineRange.value) || 0;
+    const curQSO = timelineQSOs[idx];
+    if(!curQSO) return;
+
+    timelineLabel.textContent = curQSO.datetime.toISOString().replace('T',' ').substring(0,16);
+
+    const visible = timelineQSOs.slice(0, idx+1);
+    markersLayer.clearLayers();
+    displayMarkers(visible);
+
+    if(currentOverlay) {
+      map.removeLayer(currentOverlay);
+      currentOverlay = null;
+    }
+
+    const qraLocator = (qraLocatorInput.value || 'JO20DJ').toUpperCase();
+    const bandHz = getBandForTimelineQSO(idx);
+
+    const d = curQSO.datetime;
+    const url = `https://www.voacap.com/hf/coverage.php?tx=${qraLocator}&band=${bandHz}&hh=${d.getUTCHours()}&mm=${d.getUTCMinutes()}&dd=${d.getUTCDate()}&mo=${d.getUTCMonth()+1}&yy=${d.getUTCFullYear()}`;
+    
+    currentOverlay = L.imageOverlay(url, [[-90, -180], [90, 180]], {opacity:0.5}).addTo(map);
+  }
+
+  let timelineInterval = null;
+  playBtn.addEventListener('click', async () => {
+    if (timelineInterval) clearInterval(timelineInterval);
+    timelineInterval = setInterval(async () => {
+      let idx = Number(timelineRange.value);
+      if (idx < timelineQSOs.length-1) {
+        timelineRange.value = idx+1;
+        await updateTimelineMap();
+      } else {
+        clearInterval(timelineInterval);
+      }
+    }, 900);
+  });
+
+  pauseBtn.addEventListener('click', () => {
+    if (timelineInterval) clearInterval(timelineInterval);
+  });
+
+  timelineRange.addEventListener('input', async () => {
+    await updateTimelineMap();
+  });
+
   analyzeBtn.addEventListener('click', async () => {
     const qraLocator = qraLocatorInput.value.trim().toUpperCase();
     if(!validateLocator(qraLocator)) {
@@ -347,115 +439,10 @@
     }
     progressContainer.style.display = "none";
     bandSelect.dispatchEvent(new Event('change'));
+    buildTimelineQSOs(allQSOs);
+    timelineRange.value = 0;
+    await updateTimelineMap();
   });
-  // === Timeline UI ===
-
-const timelineDiv = document.createElement('div');
-timelineDiv.innerHTML = `
-  <label><b>Concours timeline :</b> <span id="timelineLabel"></span></label>
-  <input type="range" min="0" max="0" value="0" id="timelineRange" step="1" style="width:90%">
-  <button id="playBtn">▶</button>
-  <button id="pauseBtn">⏸</button>
-`;
-document.getElementById('sidebar').appendChild(timelineDiv);
-
-const timelineRange = document.getElementById('timelineRange');
-const timelineLabel = document.getElementById('timelineLabel');
-const playBtn = document.getElementById('playBtn');
-const pauseBtn = document.getElementById('pauseBtn');
-
-// === Fonctions date et bande ===
-
-// Ces 2 utilitaires sont pour parser heure/minute
-function formatQSODateTime(qso) {
-  let time = qso.time || '0000';
-  let hours = parseInt(time.substring(0,2));
-  let mins = parseInt(time.substring(2,4));
-  return new Date(`${qso.date.substring(0,4)}-${qso.date.substring(4,6)}-${qso.date.substring(6,8)}T${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:00Z`);
-}
-
-// Liste des overlays, pour les supprimer facilement à chaque step
-let currentOverlay = null;
-let timelineQSOs = [];
-let timelineDateTimes = [];
-
-// Pour respecter l'ordre chrono
-function buildTimelineQSOs(qsos) {
-  for(const qso of qsos){
-    qso.datetime = formatQSODateTime(qso);
-  }
-  timelineQSOs = qsos.slice().sort((a,b)=>a.datetime-b.datetime);
-  timelineDateTimes = timelineQSOs.map(q=>q.datetime);
-  timelineRange.min = 0;
-  timelineRange.max = timelineQSOs.length-1;
-}
-
-function getBandForTimelineQSO(idx){
-  const qso = timelineQSOs[idx];
-  return qso.band.replace("M","").replace("CM",""); // pour api voacap (ex: 20, 40, etc.)
-}
-
-async function updateTimelineMap() {
-  const idx = Number(timelineRange.value) || 0;
-  const curQSO = timelineQSOs[idx];
-  if(!curQSO) return;
-
-  // Label timeline UTC
-  timelineLabel.textContent = curQSO.datetime.toISOString().replace('T',' ').substring(0,16);
-
-  // Affichage des QSOs <= idx
-  const visible = timelineQSOs.slice(0, idx+1);
-  markersLayer.clearLayers();
-  displayMarkers(visible);
-
-  // Gestion overlay propagation VOACAP
-  if(currentOverlay) {
-    map.removeLayer(currentOverlay);
-    currentOverlay = null;
-  }
-
-  // Prends locator station
-  const qraLocator = (qraLocatorInput.value || 'JO20DJ').toUpperCase();
-  const bandHz = getBandForTimelineQSO(idx);
-
-  // Construit url voacap (14MHz, 13h UTC, 1 mai 2024 => 14, 13, 1, 5, 2024)
-  const d = curQSO.datetime;
-  const url = `https://www.voacap.com/hf/coverage.php?tx=${qraLocator}&band=${bandHz}&hh=${d.getUTCHours()}&mm=${d.getUTCMinutes()}&dd=${d.getUTCDate()}&mo=${d.getUTCMonth()+1}&yy=${d.getUTCFullYear()}`;
-  // C'est une IMAGE PNG du monde, à mettre en overlay !
-  currentOverlay = L.imageOverlay(url, [[-90, -180], [90, 180]], {opacity:0.5}).addTo(map);
-}
-
-// Animation “play”
-let timelineInterval = null;
-playBtn.addEventListener('click', ()=>{
-  if (timelineInterval) clearInterval(timelineInterval);
-  timelineInterval = setInterval(()=> {
-    let idx = Number(timelineRange.value);
-    if (idx < timelineQSOs.length-1) {
-      timelineRange.value = idx+1;
-      updateTimelineMap();
-    } else {
-      clearInterval(timelineInterval);
-    }
-  }, 900);
-});
-pauseBtn.addEventListener('click', ()=>{
-  if (timelineInterval) clearInterval(timelineInterval);
-});
-
-// Curseur manuel
-timelineRange.addEventListener('input', updateTimelineMap);
-
-// --- Lancer la timeline après avoir chargé les QSOs ---
-
-// Dans ta fonction analyzeBtn.addEventListener('click', ...) ajoute à la toute fin :
-analyzeBtn.addEventListener('click', async () => {
-  // ... (ton code existant)
-  // Juste à la fin (après avoir peuplé allQSOs) :
-  buildTimelineQSOs(allQSOs);
-  timelineRange.value = 0;
-  updateTimelineMap();
-});
 </script>
 </body>
 </html>
