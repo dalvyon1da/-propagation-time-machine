@@ -442,10 +442,10 @@ analyzeBtn.addEventListener('click', async () => {
   /* ---------------- PROPAGATION ---------------- */
 
   const dateRange = extractDatesFromQSOs(allQSOs);
-  if (dateRange) {
-    const propData = await fetchPropagation(dateRange.min, dateRange.max);
-    displayPropagation(propData);
-  }
+ if (dateRange) {
+  const propData = await fetchPropagationGFZ(dateRange);
+  displayPropagation(propData);
+}
 });
 
 /* ---------------- MODULE PROPAGATION ---------------- */
@@ -468,62 +468,74 @@ function extractDatesFromQSOs(qsos) {
     max: formatted[formatted.length - 1]
   };
 }
-async function fetchPropagation(minDate, maxDate) {
-  const url = `https://kp.gfz.de/kpdata?startdate=${minDate}&enddate=${maxDate}&format=kp1`;
-
+async function fetchPropagationGFZ(dateRange) {
+  const url = "https://www-app3.gfz-potsdam.de/kp_index/Kp_ap_since_1932.txt";
   try {
     const response = await fetch(url);
-    if (!response.ok) throw new Error("Erreur API propagation");
-
+    if(!response.ok) throw new Error("Erreur réseau GFZ");
     const text = await response.text();
-    const lines = text.trim().split("\n");
 
-    if (lines.length === 0) return null;
+    const lines = text.split('\n').filter(l=>l.trim() && !l.startsWith('#'));
+    const minDate = new Date(dateRange.min);
+    const maxDate = new Date(dateRange.max);
+    const kpList = [], kList = [], aList = [];
 
-    // On prend la dernière ligne (la plus récente)
-    const cols = lines[lines.length - 1].trim().split(/\s+/);
+    for(const line of lines) {
+      const cols = line.trim().split(/\s+/);
+      if(cols.length<20) continue;
+      const y = cols[0], m = cols[1].padStart(2,'0'), d = cols[2].padStart(2,'0');
+      const curDate = new Date(`${y}-${m}-${d}`);
 
+      if(curDate < minDate || curDate > maxDate) continue;
+
+      const dailyK     = parseFloat(cols[11]) || null;
+      const dailyKp    = parseFloat(cols[18]) || null;
+      const dailyA     = parseFloat(cols[19]) || null;
+
+      if(!isNaN(dailyK))   kList.push(dailyK);
+      if(!isNaN(dailyKp))  kpList.push(dailyKp);
+      if(!isNaN(dailyA))   aList.push(dailyA);
+    }
+
+    function avg(arr) { return arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : null;}
     return {
-      K: cols[7],     // colonne K
-      Kp: cols[8],    // colonne Kp
-      A: cols[14]     // colonne A
+      K:  avg(kList)  !== null ? avg(kList).toFixed(2) : "?",
+      Kp: avg(kpList) !== null ? avg(kpList).toFixed(2) : "?",
+      A:  avg(aList)  !== null ? avg(aList).toFixed(2) : "?"
     };
-
-  } catch (e) {
-    console.error("Erreur propagation :", e);
+  } catch(e) {
+    console.error("Erreur propagation GFZ :", e);
     return null;
   }
 }
 function evaluatePropagation(kp) {
+  kp = parseFloat(kp);
+  if (isNaN(kp)) return {text: "Indéterminé", color: "gray"};
   if (kp <= 2) return {text: "Bonne propagation", color: "lime"};
   if (kp <= 4) return {text: "Propagation moyenne", color: "orange"};
   return {text: "Mauvaise propagation", color: "red"};
 }
 
 function displayPropagation(data) {
-    const box = document.getElementById("propagationStatus");
+  const box = document.getElementById("propagationStatus");
+  if (!data) {
+    box.innerHTML = "Impossible de récupérer les indices.";
+    box.style.color = "red";
+    return;
+  }
+  const K = data.K || "?";
+  const Kp = data.Kp || "?";
+  const A = data.A || "?";
+  const evalP = evaluatePropagation(Kp);
 
-    if (!data) {
-        box.innerHTML = "Impossible de récupérer les indices.";
-        box.style.color = "red";
-        return;
-    }
-
-    const K = data.K || "?";
-   const Kp = data.Kp || "?";
-    const A = data.A || "?";
-
-    const evalP = evaluatePropagation(parseFloat(Kp));
-
-    box.innerHTML = `
-    <b>K :</b> ${K}<br>
-    <b>Kp :</b> ${Kp}<br>
-    <b>A :</b> ${A}<br>
-    <b>${evalP.text}</b>
-`;
-    box.style.color = evalP.color;
+  box.innerHTML = `
+  <b>K moyen :</b> ${K}<br>
+  <b>Kp moyen :</b> ${Kp}<br>
+  <b>A moyen :</b> ${A}<br>
+  <b>${evalP.text}</b>
+  `;
+  box.style.color = evalP.color;
 }
-
 
 </script>
 </body>
