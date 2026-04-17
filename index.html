@@ -84,7 +84,7 @@
 
   <!-- 🔥 Bloc propagation -->
   <div id="propagationBox" style="margin-top:20px; padding:10px; background:#222; border-radius:6px;">
-    <h3>Propagation (Kp / Ap)</h3>
+    <h3>Propagation (K / Kp / A)</h3>
     <p id="propagationStatus">En attente d’analyse…</p>
   </div>
 
@@ -176,7 +176,6 @@ function locator6ToLatLon(locator) {
   return {lat, lon};
 }
 
-// --- Parsing ADIF ---
 function parseADIF(text) {
   const qsos = [];
   const records = text.split(/<EOR>/i);
@@ -276,82 +275,120 @@ function displayMarkers(filteredQSOs) {
   if(first && first.pos) map.setView([first.pos.lat, first.pos.lon], 6);
 }
 
-// --- Timeline et autres fonctions existantes --- //
-// [Pas modifiées dans cet exemple, gardées identiques]
-// ---------------------------------------------- //
+/* ---------------- TIMELINE ---------------- */
 
-// ------------------- NOUVELLE FONCTION -------------------
-// Fetch et parser les données Kp/Ap GFZ Potsdam historiques
-async function fetchAndParseGFZKpAp() {
-  const url = 'https://www-app3.gfz-potsdam.de/kp_index/Kp_ap_since_1932.txt';
-  try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Erreur chargement fichier GFZ: HTTP ${response.status}`);
-    const text = await response.text();
+let currentOverlay = null;
+let timelineQSOs = [];
+let timelineDateTimes = [];
 
-    const lines = text.split('\n').filter(l => l.trim() && !l.startsWith('#'));
-    const dataMap = new Map();
+const timelineDiv = document.createElement('div');
+timelineDiv.innerHTML = `
+  <label><b>Concours timeline :</b> <span id="timelineLabel"></span></label>
+  <input type="range" min="0" max="0" value="0" id="timelineRange" step="1" style="width:90%">
+  <button id="playBtn">▶</button>
+  <button id="pauseBtn">⏸</button>
+`;
+document.getElementById('timeline-container').appendChild(timelineDiv);
 
-    for (const line of lines) {
-      const cols = line.trim().split(/\s+/);
-      if (cols.length < 20) continue;
+const timelineRange = document.getElementById('timelineRange');
+const timelineLabel = document.getElementById('timelineLabel');
+const playBtn = document.getElementById('playBtn');
+const pauseBtn = document.getElementById('pauseBtn');
 
-      const year = cols[0];
-      const month = cols[1].padStart(2,'0');
-      const day = cols[2].padStart(2,'0');
-      const dateKey = `${year}-${month}-${day}`;
+function formatQSODateTime(qso) {
+  let time = qso.time || '0000';
+  let hours = parseInt(time.substring(0,2));
+  let mins = parseInt(time.substring(2,4));
+  return new Date(`${qso.date.substring(0,4)}-${qso.date.substring(4,6)}-${qso.date.substring(6,8)}T${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:00Z`);
+}
 
-      // Colonnes 19 et 20 (index 18 et 19) contiennent Kp et Ap moyens journaliers
-      const dailyKp = parseFloat(cols[18]);
-      const dailyAp = parseFloat(cols[19]);
-      if (isNaN(dailyKp) || isNaN(dailyAp)) continue;
+function buildTimelineQSOs(qsos) {
+  for(const qso of qsos){
+    qso.datetime = formatQSODateTime(qso);
+  }
+  timelineQSOs = qsos.slice().sort((a,b)=>a.datetime-b.datetime);
+  timelineDateTimes = timelineQSOs.map(q=>q.datetime);
+  timelineRange.min = 0;
+  timelineRange.max = timelineQSOs.length-1;
+}
 
-      dataMap.set(dateKey, {Kp: dailyKp, Ap: dailyAp});
+function getBandForTimelineQSO(idx){
+  const qso = timelineQSOs[idx];
+  if(!qso) return 20;
+  return qso.band.replace("M","").replace("CM","").trim() || 20;
+}
+
+async function updateTimelineMap() {
+  const idx = Number(timelineRange.value) || 0;
+  const curQSO = timelineQSOs[idx];
+  if(!curQSO) return;
+
+  timelineLabel.textContent = curQSO.datetime.toISOString().replace('T',' ').substring(0,16);
+
+  const visible = timelineQSOs.slice(0, idx+1);
+
+  const band = bandSelect.value;
+  let filteredVisible;
+  if(!band) {
+    filteredVisible = visible;
+  } else if (band === "VHF") {
+    filteredVisible = visible.filter(q => ["2M", "4M", "6M"].includes(q.band));
+  } else if (band === "UHF") {
+    filteredVisible = visible.filter(q => ["70CM"].includes(q.band));
+  } else {
+    filteredVisible = visible.filter(q => q.band === band);
+  }
+
+  markersLayer.clearLayers();
+  displayMarkers(filteredVisible);
+
+  if(currentOverlay) {
+    map.removeLayer(currentOverlay);
+    currentOverlay = null;
+  }
+
+  const qraLocator = (qraLocatorInput.value || 'JO20DJ').toUpperCase();
+  const bandHz = getBandForTimelineQSO(idx);
+  const d = curQSO.datetime;
+
+  const url = `https://www.voacap.com/hf/coverage.php?tx=${qraLocator}&band=${bandHz}&hh=${d.getUTCHours()}&mm=${d.getUTCMinutes()}&dd=${d.getUTCDate()}&mo=${d.getUTCMonth()+1}&yy=${d.getUTCFullYear()}`;
+
+  currentOverlay = L.imageOverlay(url, [[-90, -180], [90, 180]], {opacity:0.5}).addTo(map);
+}
+
+let timelineInterval = null;
+playBtn.addEventListener('click', async () => {
+  if (timelineInterval) clearInterval(timelineInterval);
+  timelineInterval = setInterval(async () => {
+    let idx = Number(timelineRange.value);
+    if (idx < timelineQSOs.length-1) {
+      timelineRange.value = idx+1;
+      await updateTimelineMap();
+    } else {
+      clearInterval(timelineInterval);
     }
-    return dataMap;
-  } catch(e) {
-    console.error("Erreur dans fetchAndParseGFZKpAp:", e);
-    return null;
+  }, 900);
+});
+pauseBtn.addEventListener('click', () => {
+  if (timelineInterval) clearInterval(timelineInterval);
+});
+timelineRange.addEventListener('input', async () => {
+  await updateTimelineMap();
+});
+
+qraLocatorInput.addEventListener('change', async () => {
+  const val = qraLocatorInput.value.trim().toUpperCase();
+  if(validateLocator(val)) {
+    await showStarForLocator(val);
   }
-}
+});
 
-// -------------- Évaluation propagation (couleur / texte)
-function evaluatePropagation(kp) {
-  if (kp <= 2) return {text: "Bonne propagation", color: "lime"};
-  if (kp <= 4) return {text: "Propagation moyenne", color: "orange"};
-  return {text: "Mauvaise propagation", color: "red"};
-}
+bandSelect.addEventListener('change', async () => {
+  await updateTimelineMap();
+});
 
-// -------------- Affichage propagation selon QSOs et indices Kp/Ap
-function displayPropagationFromQSOs(qsos) {
-  const box = document.getElementById("propagationStatus");
-  if(!qsos || qsos.length === 0){
-    box.innerHTML = "Pas de QSOs pour calculer la propagation.";
-    box.style.color = "red";
-    return;
-  }
+/* ---------------- ANALYSE ADIF ---------------- */
 
-  const validQSOs = qsos.filter(q => q.Kp !== null && !isNaN(q.Kp));
-  if(validQSOs.length === 0){
-    box.innerHTML = "Pas d’indices Kp disponibles pour cette date.";
-    box.style.color = "orange";
-    return;
-  }
-
-  const avgKp = validQSOs.reduce((acc,q) => acc + q.Kp,0) / validQSOs.length;
-  const avgAp = validQSOs.reduce((acc,q) => acc + q.Ap,0) / validQSOs.length;
-
-  const evalProp = evaluatePropagation(avgKp);
-
-  box.innerHTML = `
-    <b>Kp moyen (${validQSOs.length} QSOs) :</b> ${avgKp.toFixed(2)}<br>
-    <b>Ap moyen :</b> ${avgAp.toFixed(2)}<br>
-    <b>${evalProp.text}</b>
-  `;
-  box.style.color = evalProp.color;
-}
-
-// ---------------- Modification du bouton analyser -----------------
 analyzeBtn.addEventListener('click', async () => {
   const qraLocator = qraLocatorInput.value.trim().toUpperCase();
   if(!validateLocator(qraLocator)) {
@@ -398,35 +435,96 @@ analyzeBtn.addEventListener('click', async () => {
     await new Promise(r => setTimeout(r, 200));
   }
   progressContainer.style.display = "none";
-
   buildTimelineQSOs(allQSOs);
-
-  // --- NOUVEAU : Chargement des indices GFZ ---
-  info.textContent = "Chargement des indices Kp/Ap historiques...";
-  const kpApMap = await fetchAndParseGFZKpAp();
-
-  // Association Kp/Ap par date QSO
-  for(const qso of allQSOs){
-    const d = qso.date;
-    const dateKey = `${d.substring(0,4)}-${d.substring(4,6)}-${d.substring(6,8)}`;
-    if(kpApMap && kpApMap.has(dateKey)){
-      const val = kpApMap.get(dateKey);
-      qso.Kp = val.Kp;
-      qso.Ap = val.Ap;
-    } else {
-      qso.Kp = null;
-      qso.Ap = null;
-    }
-  }
-
-  info.textContent = "";
-
   timelineRange.value = 0;
   await updateTimelineMap();
 
-  // Affiche la propagation basée sur les QSOs
-  displayPropagationFromQSOs(allQSOs);
+  /* ---------------- PROPAGATION ---------------- */
+
+  const dateRange = extractDatesFromQSOs(allQSOs);
+  if (dateRange) {
+    const propData = await fetchPropagation(dateRange.min, dateRange.max);
+    displayPropagation(propData);
+  }
 });
+
+/* ---------------- MODULE PROPAGATION ---------------- */
+
+function extractDatesFromQSOs(qsos) {
+  const dates = qsos
+    .map(q => q.date)
+    .filter(d => d && d !== "N/A");
+
+  if (dates.length === 0) return null;
+
+  const formatted = dates.map(d =>
+    `${d.substring(0,4)}-${d.substring(4,6)}-${d.substring(6,8)}`
+  );
+
+  formatted.sort();
+
+  return {
+    min: formatted[0],
+    max: formatted[formatted.length - 1]
+  };
+}
+async function fetchPropagation(minDate, maxDate) {
+  const url = `https://kp.gfz.de/kpdata?startdate=${minDate}&enddate=${maxDate}&format=kp1`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Erreur API propagation");
+
+    const text = await response.text();
+    const lines = text.trim().split("\n");
+
+    if (lines.length === 0) return null;
+
+    // On prend la dernière ligne (la plus récente)
+    const cols = lines[lines.length - 1].trim().split(/\s+/);
+
+    return {
+      K: cols[7],     // colonne K
+      Kp: cols[8],    // colonne Kp
+      A: cols[14]     // colonne A
+    };
+
+  } catch (e) {
+    console.error("Erreur propagation :", e);
+    return null;
+  }
+}
+function evaluatePropagation(kp) {
+  if (kp <= 2) return {text: "Bonne propagation", color: "lime"};
+  if (kp <= 4) return {text: "Propagation moyenne", color: "orange"};
+  return {text: "Mauvaise propagation", color: "red"};
+}
+
+function displayPropagation(data) {
+    const box = document.getElementById("propagationStatus");
+
+    if (!data) {
+        box.innerHTML = "Impossible de récupérer les indices.";
+        box.style.color = "red";
+        return;
+    }
+
+    const K = data.K || "?";
+   const Kp = data.Kp || "?";
+    const A = data.A || "?";
+
+    const evalP = evaluatePropagation(parseFloat(Kp));
+
+    box.innerHTML = `
+    <b>K :</b> ${K}<br>
+    <b>Kp :</b> ${Kp}<br>
+    <b>A :</b> ${A}<br>
+    <b>${evalP.text}</b>
+`;
+    box.style.color = evalP.color;
+}
+
+
 </script>
 </body>
 </html>
