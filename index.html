@@ -470,44 +470,10 @@ function extractDatesFromQSOs(qsos) {
 }
 async function fetchPropagationGFZ(dateRange) {
   const url = "https://www-app3.gfz-potsdam.de/kp_index/Kp_ap_since_1932.txt";
+  const corsProxy = "https://cors-anywhere.herokuapp.com/";  // Temporaire uniquement & usage modéré
   try {
-    const response = await fetch(url);
+    const response = await fetch(corsProxy + url);
     if(!response.ok) throw new Error("Erreur réseau GFZ");
-    const text = await response.text();
-
-    const lines = text.split('\n').filter(l=>l.trim() && !l.startsWith('#'));
-    const minDate = new Date(dateRange.min);
-    const maxDate = new Date(dateRange.max);
-    const kpList = [], kList = [], aList = [];
-
-    for(const line of lines) {
-      const cols = line.trim().split(/\s+/);
-      if(cols.length<20) continue;
-      const y = cols[0], m = cols[1].padStart(2,'0'), d = cols[2].padStart(2,'0');
-      const curDate = new Date(`${y}-${m}-${d}`);
-
-      if(curDate < minDate || curDate > maxDate) continue;
-
-      const dailyK     = parseFloat(cols[11]) || null;
-      const dailyKp    = parseFloat(cols[18]) || null;
-      const dailyA     = parseFloat(cols[19]) || null;
-
-      if(!isNaN(dailyK))   kList.push(dailyK);
-      if(!isNaN(dailyKp))  kpList.push(dailyKp);
-      if(!isNaN(dailyA))   aList.push(dailyA);
-    }
-
-    function avg(arr) { return arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : null;}
-    return {
-      K:  avg(kList)  !== null ? avg(kList).toFixed(2) : "?",
-      Kp: avg(kpList) !== null ? avg(kpList).toFixed(2) : "?",
-      A:  avg(aList)  !== null ? avg(aList).toFixed(2) : "?"
-    };
-  } catch(e) {
-    console.error("Erreur propagation GFZ :", e);
-    return null;
-  }
-}
 function evaluatePropagation(kp) {
   kp = parseFloat(kp);
   if (isNaN(kp)) return {text: "Indéterminé", color: "gray"};
