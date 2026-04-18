@@ -30,10 +30,36 @@
 </style>
 </head>
 <body>
+  <!-- Popup d'explication propagation -->
+<div id="popupPropagation"
+  style="position: fixed; top: 20%; left: 50%; transform: translateX(-50%);
+  background: #25262b; border: 2px solid #3366cc; border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.19);
+  padding: 24px; z-index: 1000; max-width: 400px; display: none;">
+  <h2 style="margin-top:0;color:#ffd700;">Données de propagation nécessaires</h2>
+  <p>
+    Avant d’analyser vos QSOs, <b>téléchargez les données de propagation</b> Kp.<br>
+    Cliquez sur le bouton ci-dessous pour <strong>télécharger le fichier</strong>.<br>
+    Ensuite, importez-le dans la colonne de gauche (<b>Importer propagation</b>).<br><br>
+    <em>Ces étapes sont nécessaires pour permettre l’analyse propagation dans l’outil.<br>
+    Pour garantir la sécurité de vos données, ce fichier n’est jamais transmis sur internet.</em>
+  </p>
+  <a id="downloadKpBtn"
+     href="https://kp.gfz.de/app/json/?start=2024-01-01T00%3A00%3A00Z&end=2026-04-16T23%3A59%3A59Z&index=Kp"
+     download="indicesKp.json"
+     style="display:inline-block; padding:10px 18px; background:#3366cc; color:#fff; border-radius:5px; text-decoration:none; margin-bottom:12px; font-weight:bold;">
+    Télécharger le fichier Kp
+  </a><br>
+  <button onclick="document.getElementById('popupPropagation').style.display='none';"
+    style="margin-top:10px; padding:5px 15px; border-radius:5px; border:1px solid #3366cc; background:#fff; color:#3366cc;">
+    OK, j'ai compris
+  </button>
+</div>
 <div id="sidebar">
   <h2>ONLINE CONTEST ANALYSER </h2>
   <h2> BY ON1DA</h2>
   <input type="text" id="qraLocator" placeholder="Entrer le QRA-Locator de la station (ex : JO20DJ)" maxlength="6" autocomplete="off" />
+  <input type="file" id="adifFile" accept=".adi,.adif" disabled />
   <input type="file" id="adifFile" accept=".adi,.adif" disabled />
   <button id="analyzeBtn" disabled>Analyser et afficher</button>
   <select id="bandSelect">
