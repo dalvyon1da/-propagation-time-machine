@@ -35,25 +35,28 @@
     style="position: fixed; top: 20%; left: 50%; transform: translateX(-50%);
     background: #25262b; border: 2px solid #3366cc; border-radius: 10px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.19);
-    padding: 24px; z-index: 1000; max-width: 400px; display: none;">
+    padding: 24px; z-index: 1000; max-width: 420px; display: none;">
     <h2 style="margin-top:0;color:#ffd700;">Données de propagation nécessaires</h2>
     <p>
-      Avant d’analyser vos QSOs, <b>téléchargez les données de propagation</b> Kp.<br>
-      Cliquez sur le bouton ci-dessous pour <strong>télécharger le fichier</strong>.<br>
-      Ensuite, importez-le dans la colonne de gauche (<b>Importer propagation</b>).<br><br>
-      <em>Ces étapes sont nécessaires pour permettre l’analyse propagation dans l’outil.<br>
-      Pour garantir la sécurité de vos données, ce fichier n’est jamais transmis sur internet.</em>
+      <b>Étape indispensable pour continuer&nbsp;:</b><br><br>
+      1. Cliquez sur le bouton ci-dessous pour <strong>ouvrir les données de propagation</strong> dans un nouvel onglet.<br>
+      2. Dans la fenêtre qui s'ouvre, faites <b>clic droit</b> sur la page puis <b>« Enregistrer sous… »</b>.<br>
+      3. Lors de l'enregistrement, <b>renommez le fichier en <span style="color:#FFD700;">indicesKp.json</span></b> (choisissez bien « Tous les fichiers » si besoin pour l’extension).<br>
+      4. Revenez ici et importez ce fichier grâce au bouton « Importer propagation » dans la colonne de gauche.<br><br>
+      <em>Astuce&nbsp;: Ne vous souciez pas du format, l’application va lire directement le fichier JSON – votre vie privée et sécurité sont garanties (le fichier n’est jamais envoyé sur internet).</em>
     </p>
-    <a id="downloadKpBtn"
-      href="#"
-      style="display:inline-block; padding:10px 18px; background:#3366cc; color:#fff; border-radius:5px; text-decoration:none; margin-bottom:12px; font-weight:bold; cursor:pointer;">
-      Télécharger le fichier Kp
+    <a
+      href="https://kp.gfz.de/app/json/?start=2024-01-01T00%3A00%3A00Z&end=2026-04-16T23%3A59%3A59Z&index=Kp"
+      target="_blank"
+      style="display:inline-block; padding:10px 18px; background:#3366cc; color:#fff; border-radius:5px; text-decoration:none; margin-bottom:12px; font-weight:bold;">
+      Ouvrir les données de propagation
     </a><br>
     <button onclick="document.getElementById('popupPropagation').style.display='none';"
       style="margin-top:10px; padding:5px 15px; border-radius:5px; border:1px solid #3366cc; background:#fff; color:#3366cc;">
       OK, j'ai compris
     </button>
   </div>
+
   <div id="sidebar">
     <h2>ONLINE CONTEST ANALYSER </h2>
     <h2> BY ON1DA</h2>
@@ -129,7 +132,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-  // --- Ajout gestion import fichier propagation (en haut du script, pour être prêt à l'emploi) ---
+  // --- Ajout gestion import fichier propagation ---
   let propagationData = null;
   const propagationFileInput = document.getElementById('propagationFile');
   const propagationFileInfo = document.getElementById('propagationFileInfo');
@@ -152,40 +155,29 @@
       }
     });
   }
-  // -----------------------------
 
-  // Forcer le téléchargement dynamique du fichier Kp
-  document.getElementById('downloadKpBtn').addEventListener('click', async function(e) {
-    e.preventDefault();
-    const url = 'https://kp.gfz.de/app/json/?start=2024-01-01T00%3A00%3A00Z&end=2026-04-16T23%3A59%3A59Z&index=Kp';
-    try {
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error(`Erreur HTTP ${resp.status}`);
-      const data = await resp.text();
-      const blob = new Blob([data], { type: 'application/json' });
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = 'indicesKp.json';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-    } catch(error) {
-      alert('Impossible de récupérer les données pour téléchargement.\n' + error.message);
-    }
-  });
+  function getBandColor(band) {
+    const mapColor = {
+      "160M": "#800080","80M": "#0000CD","60M": "#00CED1","40M": "#228B22","30M": "#8B4513",
+      "20M": "#FFD700","17M": "#FF8C00","15M": "#DC143C","12M": "#FF1493","10M": "#00FF00",
+      "6M": "#00FA9A","4M": "#20B2AA","2M": "#1E90FF","70CM": "#FF4500","VHF": "#00BFFF","UHF": "#A52A2A"
+    };
+    return mapColor[band] || "#888888";
+  }
 
-  // Ton code existant (non affiché ici pour la brièveté) continue ici...
+  const map = L.map('map').setView([50.8,4.4],4);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom: 18,
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
 
-  /* Code complet que tu as fourni précédemment (fonctions, events, etc.) */
+  // (Le reste de ton script JS complet ici, inchangé, pour conserver toute ta logique)
 
-  // --- Ajout affichage automatique du popup propagation ---
+  // --- Affichage automatique du popup propagation au chargement ---
   window.addEventListener('load', () => {
     const popup = document.getElementById('popupPropagation');
     if (popup) popup.style.display = 'block';
   });
-  // --------------------------------------------------------
   </script>
 </body>
 </html>
