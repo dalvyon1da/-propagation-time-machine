@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <title>QSO ADIF avec synthèse propagation historique</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-  body { margin:0; font-family: Arial, sans-serif; background: #1e1e1e; color: #e0e0e0; display: flex; height: 100vh; }
+  body { margin: 0; font-family: Arial, sans-serif; background: #1e1e1e; color: #e0e0e0; display: flex; height: 100vh; }
   #sidebar { width: 350px; background: #111; padding: 20px; box-sizing: border-box; overflow: auto; }
   #map { flex: 1; }
   input, button, select { width: 100%; padding: 8px; margin: 5px 0; background: #222; border: 1px solid #444; color: #fff; box-sizing: border-box; }
@@ -27,17 +27,30 @@
   #propagation-box.medium { border-left: 6px solid #FFD700; }
   #propagation-box.bad    { border-left: 6px solid #ef5350; }
   #propagation-box.undef  { border-left: 6px solid #999; }
+  /* Popup style */
+  #popupPropagation {
+    position: fixed; top: 20%; left: 50%; transform: translateX(-50%);
+    background: #25262b; border: 2px solid #3366cc; border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.19);
+    padding: 24px; z-index: 1000; max-width: 420px; display: none;
+  }
+  #popupPropagation h2 {
+    margin-top:0; color:#ffd700;
+  }
+  #popupPropagation a {
+    display:inline-block; padding:10px 18px; background:#3366cc; color:#fff;
+    border-radius:5px; text-decoration:none; margin-bottom:12px; font-weight:bold;
+  }
+  #popupPropagation button {
+    margin-top:10px; padding:5px 15px; border-radius:5px;
+    border:1px solid #3366cc; background:#fff; color:#3366cc; cursor:pointer;
+  }
 </style>
 </head>
 <body>
-  <!-- Popup d'explication propagation -->
-  <div id="popupPropagation"
-    style="position: fixed; top: 20%; left: 50%; transform: translateX(-50%);
-    background: #25262b; border: 2px solid #3366cc; border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.19);
-    padding: 24px; z-index: 1000; max-width: 420px; display: none;">
-    <h2 style="margin-top:0;color:#ffd700;">Données de propagation nécessaires</h2>
-    <p>
+  <div id="popupPropagation" role="dialog" aria-modal="true" aria-labelledby="popupTitle" aria-describedby="popupDesc">
+    <h2 id="popupTitle">Données de propagation nécessaires</h2>
+    <p id="popupDesc">
       <b>Étape indispensable pour continuer&nbsp;:</b><br><br>
       1. Cliquez sur le bouton ci-dessous pour <strong>ouvrir les données de propagation</strong> dans un nouvel onglet.<br>
       2. Dans la fenêtre qui s'ouvre, faites <b>clic droit</b> sur la page puis <b>« Enregistrer sous… »</b>.<br>
@@ -45,16 +58,10 @@
       4. Revenez ici et importez ce fichier grâce au bouton « Importer propagation » dans la colonne de gauche.<br><br>
       <em>Astuce&nbsp;: Ne vous souciez pas du format, l’application va lire directement le fichier JSON – votre vie privée et sécurité sont garanties (le fichier n’est jamais envoyé sur internet).</em>
     </p>
-    <a
-      href="https://kp.gfz.de/app/json/?start=2024-01-01T00%3A00%3A00Z&end=2026-04-16T23%3A59%3A59Z&index=Kp"
-      target="_blank"
-      style="display:inline-block; padding:10px 18px; background:#3366cc; color:#fff; border-radius:5px; text-decoration:none; margin-bottom:12px; font-weight:bold;">
+    <a href="https://kp.gfz.de/app/json/?start=2024-01-01T00%3A00%3A00Z&end=2026-04-16T23%3A59%3A59Z&index=Kp" target="_blank" rel="noopener noreferrer">
       Ouvrir les données de propagation
     </a><br>
-    <button onclick="document.getElementById('popupPropagation').style.display='none';"
-      style="margin-top:10px; padding:5px 15px; border-radius:5px; border:1px solid #3366cc; background:#fff; color:#3366cc;">
-      OK, j'ai compris
-    </button>
+    <button id="popupCloseBtn" aria-label="Fermer popup">OK, j'ai compris</button>
   </div>
 
   <div id="sidebar">
@@ -92,6 +99,7 @@
       <option value="VHF">VHF</option>
       <option value="UHF">UHF</option>
     </select>
+
     <div id="propagation-box">
       <b>Propagation :</b> <span id="propagation-summary">–</span><br>
       <small>
@@ -100,11 +108,14 @@
         <b>A:</b> <span id="a-value"></span>
       </small>
     </div>
+
     <div class="progress-container" id="progressContainer">
       <div class="progress-bar" id="progressBar">0%</div>
     </div>
+
     <p id="info"></p>
     <div id="timeline-container" style="margin-top:10px;"></div>
+
     <div class="legend">
       <b>Couleur par bande :</b><br>
       <span style="background:#800080"></span>160m
@@ -131,46 +142,63 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
+  // Popup contrôle
+  const popup = document.getElementById('popupPropagation');
+  const popupCloseBtn = document.getElementById('popupCloseBtn');
+  popupCloseBtn.addEventListener('click', () => { popup.style.display = 'none'; });
+  window.addEventListener('load', () => { popup.style.display = 'block'; });
+
   // Gestion import fichier propagation
   let propagationData = null;
   const propagationFileInput = document.getElementById('propagationFile');
   const propagationFileInfo = document.getElementById('propagationFileInfo');
 
-  if (propagationFileInput) {
-    propagationFileInput.addEventListener('change', function(event) {
-      const file = event.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          try {
-            propagationData = JSON.parse(e.target.result);
-            propagationFileInfo.textContent = "✅ Fichier de propagation chargé : " + file.name;
-          } catch (err) {
-            propagationData = null;
-            propagationFileInfo.textContent = "❌ Fichier non valide (doit être un JSON)";
-          }
-        };
-        reader.readAsText(file);
-      }
-    });
+  propagationFileInput.addEventListener('change', function(event) {
+    const file = event.target.files[0];
+    if(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          propagationData = JSON.parse(e.target.result);
+          propagationFileInfo.textContent = "✅ Fichier de propagation chargé : " + file.name;
+        } catch (err) {
+          propagationData = null;
+          propagationFileInfo.textContent = "❌ Fichier non valide (doit être un JSON)";
+        }
+      };
+      reader.readAsText(file);
+    }
+  });
+
+  const qraLocatorInput = document.getElementById('qraLocator');
+  const adifFileInput = document.getElementById('adifFile');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+
+  function validateLocator(str) {
+    return str && str.trim().length >= 4;
   }
 
-  // Reste de ton script original pour Leaflet + gestion QSO + timeline + analyse
-  // (à insérer ici; je ne le réécris pas intégralement pour conserver la clarté)
-
-  // Par exemple :
-  // - Fonction getBandColor...
-  // - Initialisation carte...
-  // - Validations des inputs...
-  // - Fonction parseADIF...
-  // - Fonction getSpotHoleData, getGridCenter...
-  // - Gestion des événements, etc.
-
-  // Affichage automatique du popup propagation
-  window.addEventListener('load', () => {
-    const popup = document.getElementById('popupPropagation');
-    if (popup) popup.style.display = 'block';
+  // Activation champ ADIF et bouton analyse
+  qraLocatorInput.addEventListener('input', () => {
+    const valid = validateLocator(qraLocatorInput.value);
+    adifFileInput.disabled = !valid;
+    analyzeBtn.disabled = !(valid && adifFileInput.files.length > 0);
   });
+  adifFileInput.addEventListener('change', () => {
+    analyzeBtn.disabled = !(validateLocator(qraLocatorInput.value) && adifFileInput.files.length > 0);
+  });
+
+  // Initialisation carte Leaflet
+  const map = L.map('map').setView([50.8, 4.4], 4);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom: 18,
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+
+  // Ici insérer tout ton code JS fonctionnel existant pour analyse ADIF, gestion markers, timeline, propagation, etc.
+
+  // Pour rappel, ton analyseBtn.addEventListener("click", async () => { ... }) doit être là pour le traitement final.
+
   </script>
 </body>
 </html>
