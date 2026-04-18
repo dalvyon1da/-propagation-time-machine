@@ -8,51 +8,28 @@
   body { margin: 0; font-family: Arial,sans-serif; background: #1e1e1e; color: #e0e0e0; display: flex; height: 100vh; }
   #sidebar { width: 350px; background: #111; padding: 20px; box-sizing: border-box; overflow: auto; }
   #map { flex: 1; }
-  input, button, select { width: 100%; padding: 8px; margin: 5px 0; background: #222; border: 1px solid #444; color: #fff; box-sizing: border-box; }
-  button, select { cursor: pointer; border-radius: 4px; }
-  button { background: #007bff; border: none; }
+  input, button, select { width: 100%; padding: 8px; margin: 5px 0; background: #222; border: 1px solid #444; color: #fff; box-sizing: border-box;}
+  button,select { cursor: pointer; border-radius: 4px; }
+  button { background: #007bff; border:none; }
   button:hover { background: #0a84ff; }
   select { background: #222; }
-  .progress-container { display: none; width: 100%; background: #222; border-radius: 8px; margin: 10px 0; }
-  .progress-bar { height: 20px; background: #4caf50; width: 0%; border-radius: 8px; text-align: center; color: #000; line-height: 20px; font-weight: bold; }
-  #info { margin-top: 5px; color: #bbb; font-size: 13px; }
-  .legend { font-size: 13px; margin-top: 10px; padding: 6px; background: #262626; border-radius: 6px; }
-  .legend span { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border-radius: 8px; vertical-align: middle; }
-  #propagation-box { background: #23272b; border-radius: 8px; margin: 10px 0; padding: 10px 10px 10px 18px; color: #fff; border-left: 6px solid #FFD700; }
-  #propagation-box.good { border-left: 6px solid #00e676; }
-  #propagation-box.medium { border-left: 6px solid #FFD700; }
-  #propagation-box.bad { border-left: 6px solid #ef5350; }
-  #propagation-box.undef { border-left: 6px solid #999; }
-  #popupPropagation { position: fixed; top: 20%; left: 50%; transform: translateX(-50%); background: #25262b; border: 2px solid #3366cc; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.19); padding: 24px; z-index: 1000; max-width: 420px; display: none; }
-  #popupPropagation h2 { margin-top: 0; color: #ffd700; }
-  #popupPropagation a { display: inline-block; padding: 10px 18px; background: #3366cc; color: #fff; border-radius: 5px; text-decoration: none; margin-bottom: 12px; font-weight: bold; }
-  #popupPropagation button { margin-top: 10px; padding: 5px 15px; border-radius: 5px; border: 1px solid #3366cc; background: #fff; color: #3366cc; cursor: pointer; }
+  .progress-container { display:none; width:100%; background:#222; border-radius:8px; margin:10px 0; }
+  .progress-bar { height:20px; background:#4caf50; width:0%; border-radius:8px; text-align:center; color:#000; line-height:20px; font-weight:bold; transition:width 0.2s; }
+  #info { margin-top: 5px; color: #bbb; font-size: 13px;}
+  .legend { font-size:13px; margin-top:10px; padding:6px; background:#262626; border-radius:6px;}
+  .legend span { display:inline-block; width:12px; height:12px; margin-right:6px; border-radius:8px; vertical-align:middle;}
+  #propagation-box { background:#23272b; border-radius: 8px; margin:10px 0 10px 0; padding:10px 10px 10px 18px; color:#fff; border-left:6px solid #FFD700;}
+  #propagation-box.good { border-left:6px solid #00e676;}
+  #propagation-box.medium { border-left:6px solid #FFD700;}
+  #propagation-box.bad { border-left:6px solid #ef5350;}
+  #propagation-box.undef { border-left:6px solid #999;}
 </style>
 </head>
 <body>
 
-<div id="popupPropagation" role="dialog" aria-modal="true" aria-labelledby="popupTitle" aria-describedby="popupDesc">
-  <h2 id="popupTitle">Données de propagation nécessaires</h2>
-  <p id="popupDesc">
-    <b>Étape indispensable :</b><br><br>
-    1. Cliquez sur ce bouton pour <strong>ouvrir les données de propagation</strong> dans un nouvel onglet.<br>
-    2. Dans la page qui s'ouvre, faites <b>clic droit → Enregistrer sous...</b>.<br>
-    3. Renommez le fichier en <span style="color:#FFD700;">indicesKp.json</span> (choisissez « Tous les fichiers » si besoin).<br>
-    4. Importez ce fichier via le bouton « Importer propagation » à gauche.<br><br>
-    <em>Les données ne sont jamais envoyées sur internet.</em>
-  </p>
-  <a href="https://kp.gfz.de/app/json/?start=2024-01-01T00%3A00%3A00Z&end=2026-04-16T23%3A59%3A59Z&index=Kp" target="_blank" rel="noopener noreferrer">Ouvrir les données de propagation</a><br>
-  <button id="popupCloseBtn" aria-label="Fermer popup">OK, j’ai compris</button>
-</div>
-
 <div id="sidebar">
   <h2>ONLINE CONTEST ANALYSER</h2>
   <h2>BY ON1DA</h2>
-
-  <h3>Importer propagation</h3>
-  <a href="https://kp.gfz.de/app/json/?start=2024-01-01T00:00:00Z&end=2026-04-16T23:59:59Z&index=Kp" download="indicesKp.json" style="display:inline-block; margin-bottom:6px; padding:6px 12px; background:#3366cc; color:#fff; border-radius:4px; text-decoration:none;">⬇️ Télécharger le fichier propagation</a>
-  <input type="file" id="propagationFile" accept=".json,.txt" style="margin-bottom:15px;" />
-  <div id="propagationFileInfo" style="font-size:13px; color:#ffd700; margin-bottom:7px;"></div>
 
   <input type="text" id="qraLocator" placeholder="Entrer le QRA-Locator (ex : JO20DJ)" maxlength="6" autocomplete="off" />
   <input type="file" id="adifFile" accept=".adi,.adif" disabled />
@@ -79,8 +56,12 @@
   </select>
 
   <div id="propagation-box" class="undef">
-    <b>Propagation :</b> <span id="propagation-summary">–</span><br>
-    <small><b>SFI:</b> <span id="sfi-value"></span> / <b>Kp:</b> <span id="kp-value"></span> / <b>A:</b> <span id="a-value"></span></small>
+    <b>Propagation&nbsp;:</b> <span id="propagation-summary">–</span><br>
+    <small>
+      <b>SFI&nbsp;:</b> <span id="sfi-value">–</span> /
+      <b>Kp&nbsp;:</b> <span id="kp-value">–</span> /
+      <b>A&nbsp;:</b> <span id="a-value">–</span>
+    </small>
   </div>
 
   <div class="progress-container" id="progressContainer">
@@ -88,7 +69,6 @@
   </div>
 
   <p id="info"></p>
-
   <div id="timeline-container" style="margin-top:10px;"></div>
 
   <div class="legend">
@@ -115,325 +95,261 @@
 <div id="map" style="height:100vh;"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <script>
-  const popup = document.getElementById('popupPropagation');
-  const popupCloseBtn = document.getElementById('popupCloseBtn');
-  popupCloseBtn.addEventListener('click', () => popup.style.display='none');
-  window.addEventListener('load', () => popup.style.display='block');
+let kpData = [], aData = [];
+const qraInput = document.getElementById('qraLocator');
+const adifInput = document.getElementById('adifFile');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const bandSelect = document.getElementById('bandSelect');
+const info = document.getElementById('info');
+const progressContainer = document.getElementById('progressContainer');
+const progressBar = document.getElementById('progressBar');
 
-  let propagationData = null;
-  const propagationFileInput = document.getElementById('propagationFile');
-  const propagationFileInfo = document.getElementById('propagationFileInfo');
-  propagationFileInput.addEventListener('change', e => {
-    const file = e.target.files[0];
-    if(file){
-      const reader = new FileReader();
-      reader.onload = evt => {
-        try {
-          propagationData = JSON.parse(evt.target.result);
-          propagationFileInfo.textContent = `✅ Fichier propagation chargé : ${file.name}`;
-        } catch {
-          propagationData = null;
-          propagationFileInfo.textContent = "❌ Fichier non valide (doit être un JSON)";
-        }
-      };
-      reader.readAsText(file);
-    }
+function validateLocator(str){return str && str.trim().length >= 4;}
+function updateControls(){
+  const valid = validateLocator(qraInput.value);
+  adifInput.disabled = !valid;
+  analyzeBtn.disabled = !(valid && adifInput.files.length>0);
+}
+qraInput.addEventListener('input', updateControls);
+adifInput.addEventListener('change', updateControls);
+
+function locator6ToLatLon(locator){
+  if(!locator || locator.length<6) return null;
+  locator=locator.toUpperCase();
+  const A='A'.charCodeAt(0), zero='0'.charCodeAt(0);
+  const lon=(locator.charCodeAt(0)-A)*20-180+(locator.charCodeAt(2)-zero)*2+(locator.charCodeAt(4)-A)*(2/24)+(2/48);
+  const lat=(locator.charCodeAt(1)-A)*10-90+(locator.charCodeAt(3)-zero)+(locator.charCodeAt(5)-A)*(1/24)+(1/48);
+  return {lat, lon};
+}
+
+const map = L.map('map').setView([50.8,4.4],4);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18, attribution:'© OpenStreetMap contributors'}).addTo(map);
+let starMarker = null;
+async function showStarForLocator(locator){
+  if(starMarker) map.removeLayer(starMarker);
+  let pos=locator6ToLatLon(locator);
+  if(!pos) return;
+  const starIcon=L.divIcon({
+    html:`<svg width="28" height="28" viewBox="0 0 28 28"><polygon points="14,2 17,11 27,11 19,17 22,27 14,21 6,27 9,17 1,11 11,11" fill="#FFD700" stroke="#C0B000" stroke-width="2"/></svg>`,
+    className:'', iconSize:[28,28], iconAnchor:[14,14]
   });
+  starMarker=L.marker([pos.lat, pos.lon], {icon:starIcon,zIndexOffset:999}).addTo(map);
+  map.setView([pos.lat,pos.lon],7);
+}
+qraInput.addEventListener('change', async () => {
+  const val=qraInput.value.trim().toUpperCase();
+  if(validateLocator(val)) await showStarForLocator(val);
+});
 
-  const qraInput = document.getElementById('qraLocator');
-  const adifInput = document.getElementById('adifFile');
-  const analyzeBtn = document.getElementById('analyzeBtn');
-  const bandSelect = document.getElementById('bandSelect');
-  const info = document.getElementById('info');
-  const progressContainer = document.getElementById('progressContainer');
-  const progressBar = document.getElementById('progressBar');
-
-  function validateLocator(str){return str && str.trim().length >= 4;}
-
-  function updateControls(){
-    const valid = validateLocator(qraInput.value);
-    adifInput.disabled = !valid;
-    analyzeBtn.disabled = !(valid && adifInput.files.length>0);
-  }
-  qraInput.addEventListener('input', updateControls);
-  adifInput.addEventListener('change', updateControls);
-
-  const map = L.map('map').setView([50.8,4.4],4);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom:18, attribution:'© OpenStreetMap contributors'
-  }).addTo(map);
-
-  let starMarker = null;
-  async function getGridCenter(grid){
-    if(!grid) return null;
-    try{
-      const resp = await fetch(`https://spothole.app/api/v1/recherche/grille?grille=${encodeURIComponent(grid)}`);
-      if(!resp.ok) return null;
-      const json=await resp.json();
-      if(json?.center?.latitude!=null && json?.center?.longitude!=null)
-        return {lat:json.center.latitude, lon:json.center.longitude};
-      return null;
-    } catch{return null;}
-  }
-
-  function locator6ToLatLon(locator){
-    if(!locator || locator.length<6) return null;
-    locator=locator.toUpperCase();
-    const A='A'.charCodeAt(0), zero='0'.charCodeAt(0);
-    const lon=(locator.charCodeAt(0)-A)*20-180+(locator.charCodeAt(2)-zero)*2+(locator.charCodeAt(4)-A)*(2/24)+(2/48);
-    const lat=(locator.charCodeAt(1)-A)*10-90+(locator.charCodeAt(3)-zero)+(locator.charCodeAt(5)-A)*(1/24)+(1/48);
-    return {lat, lon};
-  }
-
-  async function showStarForLocator(locator){
-    if(starMarker) map.removeLayer(starMarker);
-    let pos=null;
-    if(locator && locator.length>=4){
-      const apiPos=await getGridCenter(locator);
-      pos=apiPos||locator6ToLatLon(locator);
+const markersLayer = L.layerGroup().addTo(map);
+function getBandColor(band){
+  const colors={
+    "160M":"#800080","80M":"#0000CD","60M":"#00CED1","40M":"#228B22","30M":"#8B4513",
+    "20M":"#FFD700","17M":"#FF8C00","15M":"#DC143C","12M":"#FF1493","10M":"#00FF00",
+    "6M":"#00FA9A","4M":"#20B2AA","2M":"#1E90FF","70CM":"#FF4500","VHF":"#00BFFF","UHF":"#A52A2A"
+  };
+  return colors[band]||"#888888";
+}
+function displayMarkers(qsos){
+  markersLayer.clearLayers();
+  let localizedCount=0;
+  for(const qso of qsos){
+    if(qso.pos){
+      localizedCount++;
+      L.circleMarker([qso.pos.lat,qso.pos.lon], {radius:6, color:getBandColor(qso.band), fillColor:getBandColor(qso.band), fillOpacity:0.8})
+        .addTo(markersLayer)
+        .bindPopup(`<b>Call:</b> ${qso.call}<br/><b>Bande:</b> ${qso.band}<br/><b>Date:</b> ${qso.date}<br/><b>Locator:</b> ${qso.locator}`);
     }
-    if(!pos) return;
-    const starIcon=L.divIcon({
-      html:`<svg width="28" height="28" viewBox="0 0 28 28"><polygon points="14,2 17,11 27,11 19,17 22,27 14,21 6,27 9,17 1,11 11,11" fill="#FFD700" stroke="#C0B000" stroke-width="2"/></svg>`,
-      className:'', iconSize:[28,28], iconAnchor:[14,14]
+  }
+  info.textContent=`QSO affichés : ${qsos.length} — QSO géolocalisés : ${localizedCount}`;
+  if(starMarker && typeof starMarker.bringToFront==='function') starMarker.bringToFront();
+}
+
+function parseADIF(text){
+  const qsos=[];
+  const records=text.split(/<EOR>/i);
+  for(const rec of records){
+    const callMatch=rec.match(/<CALL:\s*\d+>\s*([^<\s]+)/i);
+    if(!callMatch) continue;
+    const bandMatch=rec.match(/<BAND:\s*\d+>\s*([^<\s]+)/i);
+    const dateMatch=rec.match(/<QSO_DATE:\s*\d+>\s*(\d{8})/i);
+    const timeMatch=rec.match(/<TIME_ON:\s*\d+>\s*(\d{4})/i);
+    qsos.push({
+      call: callMatch[1].trim().toUpperCase(),
+      band: bandMatch ? bandMatch[1].trim().toUpperCase() : 'N/A',
+      date: dateMatch ? dateMatch[1].trim() : 'N/A',
+      time: timeMatch ? timeMatch[1].trim() : '0000'
     });
-    starMarker=L.marker([pos.lat, pos.lon], {icon:starIcon,zIndexOffset:999}).addTo(map);
-    map.setView([pos.lat,pos.lon],7);
   }
-  qraInput.addEventListener('change', async () => {
-    const val=qraInput.value.trim().toUpperCase();
-    if(validateLocator(val)) await showStarForLocator(val);
-  });
+  return qsos;
+}
 
-  const markersLayer = L.layerGroup().addTo(map);
-  function getBandColor(band){
-    const colors={
-      "160M":"#800080","80M":"#0000CD","60M":"#00CED1","40M":"#228B22","30M":"#8B4513",
-      "20M":"#FFD700","17M":"#FF8C00","15M":"#DC143C","12M":"#FF1493","10M":"#00FF00",
-      "6M":"#00FA9A","4M":"#20B2AA","2M":"#1E90FF","70CM":"#FF4500","VHF":"#00BFFF","UHF":"#A52A2A"
-    };
-    return colors[band]||"#888888";
+function formatQSODateTime(qso){
+  let time=qso.time || "0000";
+  let h=parseInt(time.substring(0,2)), m=parseInt(time.substring(2,4));
+  return new Date(`${qso.date.substring(0,4)}-${qso.date.substring(4,6)}-${qso.date.substring(6,8)}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00Z`);
+}
+
+let timelineQSOs=[], timelineInterval=null;
+
+function buildTimelineQSOs(qsos){
+  for(const q of qsos) q.datetime=formatQSODateTime(q);
+  timelineQSOs=qsos.slice().sort((a,b)=>a.datetime-b.datetime);
+}
+
+function computePropagationState(kp, band){
+  kp=Number(kp);
+  if(isNaN(kp))return {synth:"Indéterminée",colorClass:"undef"};
+  if(!band||["160M","80M","60M","40M","30M","20M","17M","15M","12M","10M"].includes(band)){
+    if(kp<3)return {synth:"Bonne",colorClass:"good"};
+    if(kp<5)return {synth:"Moyenne",colorClass:"medium"};
+    return {synth:"Mauvaise",colorClass:"bad"};
+  } else if(["6M","4M","2M","70CM","VHF","UHF"].includes(band)){
+    if(kp<2)return {synth:"Bonne",colorClass:"good"};
+    if(kp<5)return {synth:"Moyenne",colorClass:"medium"};
+    return {synth:"Mauvaise",colorClass:"bad"};
   }
-  function displayMarkers(qsos){
-    markersLayer.clearLayers();
-    let localizedCount=0;
-    for(const qso of qsos){
-      if(qso.pos){
-        localizedCount++;
-        L.circleMarker([qso.pos.lat,qso.pos.lon], {
-          radius:6, color:getBandColor(qso.band), fillColor:getBandColor(qso.band), fillOpacity:0.8
-        }).addTo(markersLayer).bindPopup(`<b>Call:</b> ${qso.call}<br/><b>Bande:</b> ${qso.band}<br/><b>Date:</b> ${qso.date}<br/><b>Locator:</b> ${qso.locator}`);
-      }
-    }
-    info.textContent=`QSO affichés : ${qsos.length} — QSO géolocalisés : ${localizedCount}`;
-    if(starMarker && typeof starMarker.bringToFront==='function') starMarker.bringToFront();
-    const first=qsos.find(q=>q.pos);
-    if(first&&first.pos) map.setView([first.pos.lat,first.pos.lon],6);
+  return {synth:"Indéterminée",colorClass:"undef"};
+}
+
+function getKpAForDate(dateStr) {
+  const foundKp = kpData.find(row => row.date.replace(/-/g,'').replace(/T.*/,'') === dateStr);
+  const foundA = aData.find(row => row.date.replace(/-/g,'').replace(/T.*/,'') === dateStr);
+  return {
+    kp: foundKp ? foundKp.kp : null,
+    a: foundA ? foundA.a : null
+  };
+}
+
+async function updatePropagationBoxForCurrentSelectionAndBand(dateStr, band){
+  const { kp, a } = getKpAForDate(dateStr);
+  // SFI non dispo API - laisse "–"
+  document.getElementById("sfi-value").textContent = "–";
+  document.getElementById("kp-value").textContent = kp!=null ? kp : "–";
+  document.getElementById("a-value").textContent = a!=null ? a : "–";
+  const {synth,colorClass}=computePropagationState(kp,band);
+  document.getElementById("propagation-box").className=colorClass;
+  document.getElementById("propagation-summary").textContent=synth;
+}
+
+// Timeline et navigation
+const timelineContainer=document.getElementById("timeline-container");
+timelineContainer.innerHTML=`
+  <label><b>Concours timeline :</b> <span id="timelineLabel"></span></label>
+  <input type="range" min="0" max="0" value="0" id="timelineRange" step="1" style="width:90%" />
+  <button id="playBtn">▶</button>
+  <button id="pauseBtn">⏸</button>
+`;
+
+const timelineRange=document.getElementById("timelineRange");
+const playBtn=document.getElementById("playBtn");
+const pauseBtn=document.getElementById("pauseBtn");
+
+async function updateTimelineMap(idx){
+  if(typeof idx!=="number") idx=0;
+  const curQSO=timelineQSOs[idx];
+  if(!curQSO) return;
+  document.getElementById('timelineLabel').textContent=curQSO.datetime.toISOString().substring(0,16).replace('T',' ');
+  let visible=timelineQSOs.slice(0,idx+1);
+  const band=bandSelect.value;
+  if(band){
+    if(band==="VHF") visible=visible.filter(q=>["2M","4M","6M"].includes(q.band));
+    else if(band==="UHF") visible=visible.filter(q=>["70CM"].includes(q.band));
+    else visible=visible.filter(q=>q.band===band);
   }
+  displayMarkers(visible);
+  if(curQSO.date) await updatePropagationBoxForCurrentSelectionAndBand(curQSO.date, band);
+}
 
-  function parseADIF(text){
-    const qsos=[];
-    const records=text.split(/<EOR>/i);
-    for(const rec of records){
-      const callMatch=rec.match(/<CALL:\s*\d+>\s*([^<\s]+)/i);
-      if(!callMatch) continue;
-      const bandMatch=rec.match(/<BAND:\s*\d+>\s*([^<\s]+)/i);
-      const dateMatch=rec.match(/<QSO_DATE:\s*\d+>\s*(\d{8})/i);
-      const timeMatch=rec.match(/<TIME_ON:\s*\d+>\s*(\d{4})/i);
-      qsos.push({
-        call: callMatch[1].trim().toUpperCase(),
-        band: bandMatch ? bandMatch[1].trim().toUpperCase() : 'N/A',
-        date: dateMatch ? dateMatch[1].trim() : 'N/A',
-        time: timeMatch ? timeMatch[1].trim() : '0000'
-      });
-    }
-    return qsos;
+timelineRange.addEventListener("input", async()=>{await updateTimelineMap(Number(timelineRange.value));});
+bandSelect.addEventListener("change", async()=>{await updateTimelineMap(Number(timelineRange.value));});
+
+playBtn.addEventListener("click", ()=>{
+  if(timelineInterval) clearInterval(timelineInterval);
+  timelineInterval=setInterval(async()=>{
+    const idx=Number(timelineRange.value);
+    if(idx<timelineQSOs.length-1){
+      timelineRange.value=idx+1;
+      await updateTimelineMap(idx+1);
+    } else {clearInterval(timelineInterval);}
+  },900);
+});
+pauseBtn.addEventListener("click", ()=>{
+  if(timelineInterval) clearInterval(timelineInterval);
+});
+
+async function getKpAData(minDate, maxDate) {
+  // Dates au format YYYY-MM-DD
+  const start = minDate + "T00:00:00Z";
+  const end   = maxDate + "T23:59:59Z";
+  // Récupère l'index Kp
+  let response = await fetch(`https://kp.gfz.de/app/json/?start=${start}&end=${end}&index=Kp&status=def`);
+  kpData = await response.json();
+  // Récupère l'index "a" si tu veux aussi l'afficher : index=a
+  response = await fetch(`https://kp.gfz.de/app/json/?start=${start}&end=${end}&index=a&status=def`);
+  aData = await response.json();
+}
+
+// Fonction principale
+let allQSOs = [];
+analyzeBtn.addEventListener("click",async()=>{
+  const qraLocator=qraInput.value.trim().toUpperCase();
+  if(!validateLocator(qraLocator)){
+    alert("Merci d’entrer un QRA-locator valide.");
+    return;
   }
+  await showStarForLocator(qraLocator);
+  info.textContent="";
+  progressContainer.style.display="block";
+  progressBar.style.width="0%";
+  progressBar.textContent="0%";
+  markersLayer.clearLayers();
+  map.setView(locator6ToLatLon(qraLocator)||[50.8,4.4],6);
 
-  async function getSpotHoleData(callsign){
-    try{
-      const url=`https://spothole.app/api/v1/lookup/call?call=${encodeURIComponent(callsign)}`;
-      const resp=await fetch(url);
-      if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const json=await resp.json();
-      return Array.isArray(json)?json[0]||null:json;
-    }catch{return null;}
+  const text=await adifInput.files[0].text();
+  const qsos=parseADIF(text);
+  allQSOs=[];
+  let minDate="99999999", maxDate="00000000";
+  // première passe pour dates min/max
+  for(const qso of qsos) {
+    if(qso.date < minDate) minDate = qso.date;
+    if(qso.date > maxDate) maxDate = qso.date;
   }
+  // Formatage YYYY-MM-DD
+  minDate = `${minDate.substr(0,4)}-${minDate.substr(4,2)}-${minDate.substr(6,2)}`;
+  maxDate = `${maxDate.substr(0,4)}-${maxDate.substr(4,2)}-${maxDate.substr(6,2)}`;
 
-  function formatQSODateTime(qso){
-    let time=qso.time || "0000";
-    let h=parseInt(time.substring(0,2)), m=parseInt(time.substring(2,4));
-    return new Date(`${qso.date.substring(0,4)}-${qso.date.substring(4,6)}-${qso.date.substring(6,8)}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00Z`);
-  }
+  await getKpAData(minDate, maxDate);
 
-  let timelineQSOs=[], timelineInterval=null;
-  function buildTimelineQSOs(qsos){
-    for(const q of qsos) q.datetime=formatQSODateTime(q);
-    timelineQSOs=qsos.slice().sort((a,b)=>a.datetime-b.datetime);
-  }
+  for(let i=0;i<qsos.length;i++){
+    const qso=qsos[i];
+    // Option: ignore la géoloc spotHole pour aller plus vite sinon garde getSpotHoleData etc.
+    qso.locator = qso.locator || qraLocator;
+    qso.pos = locator6ToLatLon(qso.locator) || null;
+    allQSOs.push(qso);
 
-  async function updateTimelineMap(idx){
-    if(typeof idx!=="number") idx=0;
-    const curQSO=timelineQSOs[idx];
-    if(!curQSO) return;
-    document.getElementById('timelineLabel').textContent=curQSO.datetime.toISOString().substring(0,16).replace('T',' ');
-    let visible=timelineQSOs.slice(0,idx+1);
-    const band=bandSelect.value;
-    if(band){
-      if(band==="VHF") visible=visible.filter(q=>["2M","4M","6M"].includes(q.band));
-      else if(band==="UHF") visible=visible.filter(q=>["70CM"].includes(q.band));
-      else visible=visible.filter(q=>q.band===band);
-    }
-    displayMarkers(visible);
-    if(curQSO.date) await updatePropagationBoxForCurrentSelectionAndBand(curQSO.date, band);
-  }
+    const pct=Math.round(100*(i+1)/qsos.length);
+    progressBar.style.width=pct+"%";
+    progressBar.textContent=pct+"%";
 
-  const timelineContainer=document.getElementById("timeline-container");
-  timelineContainer.innerHTML=`
-    <label><b>Concours timeline :</b> <span id="timelineLabel"></span></label>
-    <input type="range" min="0" max="0" value="0" id="timelineRange" step="1" style="width:90%" />
-    <button id="playBtn">▶</button>
-    <button id="pauseBtn">⏸</button>
-  `;
-
-  const timelineRange=document.getElementById("timelineRange");
-  const playBtn=document.getElementById("playBtn");
-  const pauseBtn=document.getElementById("pauseBtn");
-
-  timelineRange.addEventListener("input", async()=>{await updateTimelineMap(Number(timelineRange.value));});
-  bandSelect.addEventListener("change", async()=>{await updateTimelineMap(Number(timelineRange.value));});
-
-  playBtn.addEventListener("click", ()=>{
-    if(timelineInterval) clearInterval(timelineInterval);
-    timelineInterval=setInterval(async()=>{
-      const idx=Number(timelineRange.value);
-      if(idx<timelineQSOs.length-1){
-        timelineRange.value=idx+1;
-        await updateTimelineMap(idx+1);
-      } else {clearInterval(timelineInterval);}
-    },900);
-  });
-
-  pauseBtn.addEventListener("click", ()=>{
-    if(timelineInterval) clearInterval(timelineInterval);
-  });
-
-  async function getDailySFI(dateStr){
-    try{
-      const resp=await fetch('https://services.swpc.noaa.gov/text/daily-solar-indices.txt');
-      const text=await resp.text();
-      const lines=text.split('\n');
-      for(const line of lines){
-        if(line.startsWith(dateStr)){
-          const tokens=line.trim().split(/\s+/);
-          if(tokens.length>7){
-            const sfi=parseFloat(tokens[7]);
-            if(!isNaN(sfi)) return sfi;
-          }
-        }
-      }
-    }catch{}
-    return null;
-  }
-
-  async function getDailyKpA(dateStr){
-    try{
-      const resp=await fetch('https://services.swpc.noaa.gov/text/daily-geomagnetic-indices.txt');
-      const text=await resp.text();
-      const lines=text.split('\n');
-      for(const line of lines){
-        if(line.startsWith(dateStr)){
-          const tokens=line.trim().split(/\s+/);
-          const kp=tokens.length>4?parseFloat(tokens[4]):null;
-          const a=tokens.length>2?parseInt(tokens[2]):null;
-          return {kp,a};
-        }
-      }
-    }catch{}
-    return {kp:null,a:null};
-  }
-
-  function computePropagationState(sfi,kp,band){
-    sfi=Number(sfi); kp=Number(kp);
-    if(isNaN(sfi)||isNaN(kp))return {synth:"Indéterminée",colorClass:"undef"};
-    if(!band||["160M","80M","60M","40M","30M","20M","17M","15M","12M","10M"].includes(band)){
-      if(sfi>120&&kp<3)return {synth:"Bonne",colorClass:"good"};
-      if(sfi>90&&kp<5)return {synth:"Moyenne",colorClass:"medium"};
-      return {synth:"Mauvaise",colorClass:"bad"};
-    } else if(["6M","4M","2M","70CM","VHF","UHF"].includes(band)){
-      if(kp<2)return {synth:"Bonne",colorClass:"good"};
-      if(kp<5)return {synth:"Moyenne",colorClass:"medium"};
-      return {synth:"Mauvaise",colorClass:"bad"};
-    }
-    return {synth:"Indéterminée",colorClass:"undef"};
+    await new Promise(r=>setTimeout(r,20));
   }
 
-  async function updatePropagationBoxForCurrentSelectionAndBand(dateStr,band){
-    const [sfi,kpA]=await Promise.all([getDailySFI(dateStr),getDailyKpA(dateStr)]);
-    const {synth,colorClass}=computePropagationState(sfi,kpA.kp,band);
-    document.getElementById("sfi-value").textContent=sfi!=null?sfi:"–";
-    document.getElementById("kp-value").textContent=kpA.kp!=null?kpA.kp:"–";
-    document.getElementById("a-value").textContent=kpA.a!=null?kpA.a:"–";
-    const pbox=document.getElementById("propagation-box");
-    pbox.className=colorClass;
-    document.getElementById("propagation-summary").textContent=synth;
-  }
+  progressContainer.style.display="none";
+  buildTimelineQSOs(allQSOs);
+  timelineRange.min=0;
+  timelineRange.max=allQSOs.length-1;
+  timelineRange.value=0;
+  await updateTimelineMap(0);
+});
 
-  let allQSOs = [];
-  analyzeBtn.addEventListener("click",async()=>{
-    const qraLocator=qraInput.value.trim().toUpperCase();
-    if(!validateLocator(qraLocator)){
-      alert("Merci d’entrer un QRA-locator valide.");
-      return;
-    }
-    await showStarForLocator(qraLocator);
-    info.textContent="";
-    progressContainer.style.display="block";
-    progressBar.style.width="0%";
-    progressBar.textContent="0%";
-    markersLayer.clearLayers();
-    map.setView(locator6ToLatLon(qraLocator)||[50.8,4.4],6);
-
-    const text=await adifInput.files[0].text();
-    const qsos=parseADIF(text);
-    allQSOs=[];
-
-    for(let i=0;i<qsos.length;i++){
-      const qso=qsos[i];
-      const spotData=await getSpotHoleData(qso.call);
-      let lat=null, lon=null, locator=null;
-      if(spotData){
-        locator=spotData.dx_grid||spotData.grid||null;
-        lat=spotData.dx_latitude!=null?spotData.dx_latitude:(spotData.latitude!=null?spotData.latitude:null);
-        lon=spotData.dx_longitude!=null?spotData.dx_longitude:(spotData.longitude!=null?spotData.longitude:null);
-      }
-      qso.locator=locator?locator.toUpperCase():"Inconnu";
-      let pos=null;
-      if(lat!==null&&lon!==null)pos={lat,lon};
-      else if(locator){
-        pos=await getGridCenter(locator);
-        if(!pos)pos=locator6ToLatLon(locator)||locatorToLatLon(locator);
-      }
-      qso.pos=pos||null;
-      allQSOs.push(qso);
-
-      const pct=Math.round(100*(i+1)/qsos.length);
-      progressBar.style.width=pct+"%";
-      progressBar.textContent=pct+"%";
-
-      await new Promise(r=>setTimeout(r,200));
-    }
-
-    progressContainer.style.display="none";
-    buildTimelineQSOs(allQSOs);
-    timelineRange.min=0;
-    timelineRange.max=allQSOs.length-1;
-    timelineRange.value=0;
-    await updateTimelineMap(0);
-  });
+// Initial état boite propagation
+document.getElementById("sfi-value").textContent = "–";
+document.getElementById("kp-value").textContent = "–";
+document.getElementById("a-value").textContent = "–";
+document.getElementById("propagation-summary").textContent = "–";
+document.getElementById("propagation-box").className = "undef";
 </script>
-
 </body>
 </html>
