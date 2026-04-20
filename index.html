@@ -15,14 +15,14 @@
   select { background: #222; }
   .progress-container { display:none; width:100%; background:#222; border-radius:8px; margin:10px 0; }
   .progress-bar { height:20px; background:#4caf50; width:0%; border-radius:8px; text-align:center; color:#000; line-height:20px; font-weight:bold; transition:width 0.2s; }
-  #info { margin-top: 5px; color: #bbb; font-size: 13px;}
+  #info { margin-top: 5px; color: #fff; font-size: 13px;}
   .legend { font-size:13px; margin-top:10px; padding:6px; background:#262626; border-radius:6px;}
   .legend span { display:inline-block; width:12px; height:12px; margin-right:6px; border-radius:8px; vertical-align:middle;}
   #propagation-box { background:#23272b; border-radius: 8px; margin:10px 0 10px 0; padding:10px 10px 10px 18px; color:#fff; border-left:6px solid #FFD700;}
-  #propagation-box.good { border-left:6px solid #00e676;}
-  #propagation-box.medium { border-left:6px solid #FFD700;}
-  #propagation-box.bad { border-left:6px solid #ef5350;}
-  #propagation-box.undef { border-left:6px solid #999;}
+  #propagation-box.good { border-left:6px solid #19e520 !important; }
+  #propagation-box.medium { border-left:6px solid #ffa500 !important; }
+  #propagation-box.bad { border-left:6px solid #ef5350 !important; }
+  #propagation-box.undef { border-left:6px solid #999 !important; }
 </style>
 </head>
 <body>
@@ -166,6 +166,7 @@ function displayMarkers(qsos){
   if(starMarker && typeof starMarker.bringToFront==='function') starMarker.bringToFront();
 }
 
+// CORRECTION 1 : Extraction du locator depuis l’ADIF
 function parseADIF(text){
   const qsos=[];
   const records=text.split(/<EOR>/i);
@@ -175,11 +176,14 @@ function parseADIF(text){
     const bandMatch=rec.match(/<BAND:\s*\d+>\s*([^<\s]+)/i);
     const dateMatch=rec.match(/<QSO_DATE:\s*\d+>\s*(\d{8})/i);
     const timeMatch=rec.match(/<TIME_ON:\s*\d+>\s*(\d{4})/i);
+    // Ajout extraction locator
+    const locatorMatch = rec.match(/<(GRIDSQUARE|LOCATOR):\s*\d+>\s*([^<\s]+)/i);
     qsos.push({
       call: callMatch[1].trim().toUpperCase(),
       band: bandMatch ? bandMatch[1].trim().toUpperCase() : 'N/A',
       date: dateMatch ? dateMatch[1].trim() : 'N/A',
-      time: timeMatch ? timeMatch[1].trim() : '0000'
+      time: timeMatch ? timeMatch[1].trim() : '0000',
+      locator: locatorMatch ? locatorMatch[2].trim().toUpperCase() : undefined
     });
   }
   return qsos;
@@ -198,6 +202,7 @@ function buildTimelineQSOs(qsos){
   timelineQSOs=qsos.slice().sort((a,b)=>a.datetime-b.datetime);
 }
 
+// --- Correction propagation
 function computePropagationState(kp, band){
   kp=Number(kp);
   if(isNaN(kp))return {synth:"Indéterminée",colorClass:"undef"};
@@ -222,15 +227,30 @@ function getKpAForDate(dateStr) {
   };
 }
 
+// ---- Correction : indication traitement OK + update propagation
 async function updatePropagationBoxForCurrentSelectionAndBand(dateStr, band){
+  if(!dateStr){
+    document.getElementById("sfi-value").textContent = "–";
+    document.getElementById("kp-value").textContent = "–";
+    document.getElementById("a-value").textContent = "–";
+    document.getElementById("propagation-summary").textContent = "–";
+    document.getElementById("propagation-box").className = "undef";
+    info.textContent = "";
+    return;
+  }
   const { kp, a } = getKpAForDate(dateStr);
-  // SFI non dispo API - laisse "–"
   document.getElementById("sfi-value").textContent = "–";
   document.getElementById("kp-value").textContent = kp!=null ? kp : "–";
   document.getElementById("a-value").textContent = a!=null ? a : "–";
   const {synth,colorClass}=computePropagationState(kp,band);
-  document.getElementById("propagation-box").className=colorClass;
-  document.getElementById("propagation-summary").textContent=synth;
+  document.getElementById("propagation-box").className = "undef " + colorClass;
+  document.getElementById("propagation-summary").textContent = synth;
+
+  // Indication utilisateur
+  if (kp !== null)
+    info.textContent = "Propagation mise à jour ("+synth+") (Kp="+kp+(a!==null?(", A="+a):"")+")";
+  else
+    info.textContent = "Aucune donnée de propagation trouvée pour cette date.";
 }
 
 // Timeline et navigation
@@ -273,7 +293,7 @@ playBtn.addEventListener("click", ()=>{
       timelineRange.value=idx+1;
       await updateTimelineMap(idx+1);
     } else {clearInterval(timelineInterval);}
-  },900);
+  },700);
 });
 pauseBtn.addEventListener("click", ()=>{
   if(timelineInterval) clearInterval(timelineInterval);
@@ -283,10 +303,8 @@ async function getKpAData(minDate, maxDate) {
   // Dates au format YYYY-MM-DD
   const start = minDate + "T00:00:00Z";
   const end   = maxDate + "T23:59:59Z";
-  // Récupère l'index Kp
   let response = await fetch(`https://kp.gfz.de/app/json/?start=${start}&end=${end}&index=Kp&status=def`);
   kpData = await response.json();
-  // Récupère l'index "a" si tu veux aussi l'afficher : index=a
   response = await fetch(`https://kp.gfz.de/app/json/?start=${start}&end=${end}&index=a&status=def`);
   aData = await response.json();
 }
@@ -311,29 +329,28 @@ analyzeBtn.addEventListener("click",async()=>{
   const qsos=parseADIF(text);
   allQSOs=[];
   let minDate="99999999", maxDate="00000000";
-  // première passe pour dates min/max
   for(const qso of qsos) {
     if(qso.date < minDate) minDate = qso.date;
     if(qso.date > maxDate) maxDate = qso.date;
   }
-  // Formatage YYYY-MM-DD
   minDate = `${minDate.substr(0,4)}-${minDate.substr(4,2)}-${minDate.substr(6,2)}`;
   maxDate = `${maxDate.substr(0,4)}-${maxDate.substr(4,2)}-${maxDate.substr(6,2)}`;
 
+  info.textContent="Traitement des données de propagation en cours...";
   await getKpAData(minDate, maxDate);
+  info.textContent="Traitement QSOs + extraction propagation...";
 
   for(let i=0;i<qsos.length;i++){
     const qso=qsos[i];
-    // Option: ignore la géoloc spotHole pour aller plus vite sinon garde getSpotHoleData etc.
-    qso.locator = qso.locator || qraLocator;
-    qso.pos = locator6ToLatLon(qso.locator) || null;
+    // Si pas de locator dans le qso, prend le locator opérateur
+    qso.pos = locator6ToLatLon(qso.locator || qraLocator) || null;
     allQSOs.push(qso);
 
     const pct=Math.round(100*(i+1)/qsos.length);
     progressBar.style.width=pct+"%";
     progressBar.textContent=pct+"%";
 
-    await new Promise(r=>setTimeout(r,20));
+    await new Promise(r=>setTimeout(r, 20)); // Laisse le temps à l’UI d’update la progression
   }
 
   progressContainer.style.display="none";
@@ -344,7 +361,6 @@ analyzeBtn.addEventListener("click",async()=>{
   await updateTimelineMap(0);
 });
 
-// Initial état boite propagation
 document.getElementById("sfi-value").textContent = "–";
 document.getElementById("kp-value").textContent = "–";
 document.getElementById("a-value").textContent = "–";
