@@ -166,7 +166,7 @@ function displayMarkers(qsos){
   if(starMarker && typeof starMarker.bringToFront==='function') starMarker.bringToFront();
 }
 
-// CORRECTION 1 : Extraction du locator depuis l’ADIF
+// Extraction du locator dans parseADIF
 function parseADIF(text){
   const qsos=[];
   const records=text.split(/<EOR>/i);
@@ -176,7 +176,7 @@ function parseADIF(text){
     const bandMatch=rec.match(/<BAND:\s*\d+>\s*([^<\s]+)/i);
     const dateMatch=rec.match(/<QSO_DATE:\s*\d+>\s*(\d{8})/i);
     const timeMatch=rec.match(/<TIME_ON:\s*\d+>\s*(\d{4})/i);
-    // Ajout extraction locator
+    // Extraction locator depuis IDIT : GRIDSQUARE ou LOCATOR
     const locatorMatch = rec.match(/<(GRIDSQUARE|LOCATOR):\s*\d+>\s*([^<\s]+)/i);
     qsos.push({
       call: callMatch[1].trim().toUpperCase(),
@@ -202,7 +202,6 @@ function buildTimelineQSOs(qsos){
   timelineQSOs=qsos.slice().sort((a,b)=>a.datetime-b.datetime);
 }
 
-// --- Correction propagation
 function computePropagationState(kp, band){
   kp=Number(kp);
   if(isNaN(kp))return {synth:"Indéterminée",colorClass:"undef"};
@@ -227,7 +226,6 @@ function getKpAForDate(dateStr) {
   };
 }
 
-// ---- Correction : indication traitement OK + update propagation
 async function updatePropagationBoxForCurrentSelectionAndBand(dateStr, band){
   if(!dateStr){
     document.getElementById("sfi-value").textContent = "–";
@@ -246,14 +244,12 @@ async function updatePropagationBoxForCurrentSelectionAndBand(dateStr, band){
   document.getElementById("propagation-box").className = "undef " + colorClass;
   document.getElementById("propagation-summary").textContent = synth;
 
-  // Indication utilisateur
-  if (kp !== null)
+  if(kp !== null)
     info.textContent = "Propagation mise à jour ("+synth+") (Kp="+kp+(a!==null?(", A="+a):"")+")";
   else
     info.textContent = "Aucune donnée de propagation trouvée pour cette date.";
 }
 
-// Timeline et navigation
 const timelineContainer=document.getElementById("timeline-container");
 timelineContainer.innerHTML=`
   <label><b>Concours timeline :</b> <span id="timelineLabel"></span></label>
@@ -261,7 +257,6 @@ timelineContainer.innerHTML=`
   <button id="playBtn">▶</button>
   <button id="pauseBtn">⏸</button>
 `;
-
 const timelineRange=document.getElementById("timelineRange");
 const playBtn=document.getElementById("playBtn");
 const pauseBtn=document.getElementById("pauseBtn");
@@ -300,7 +295,6 @@ pauseBtn.addEventListener("click", ()=>{
 });
 
 async function getKpAData(minDate, maxDate) {
-  // Dates au format YYYY-MM-DD
   const start = minDate + "T00:00:00Z";
   const end   = maxDate + "T23:59:59Z";
   let response = await fetch(`https://kp.gfz.de/app/json/?start=${start}&end=${end}&index=Kp&status=def`);
@@ -309,7 +303,7 @@ async function getKpAData(minDate, maxDate) {
   aData = await response.json();
 }
 
-// Fonction principale
+// Analyse & affichage QSOs
 let allQSOs = [];
 analyzeBtn.addEventListener("click",async()=>{
   const qraLocator=qraInput.value.trim().toUpperCase();
@@ -342,7 +336,6 @@ analyzeBtn.addEventListener("click",async()=>{
 
   for(let i=0;i<qsos.length;i++){
     const qso=qsos[i];
-    // Si pas de locator dans le qso, prend le locator opérateur
     qso.pos = locator6ToLatLon(qso.locator || qraLocator) || null;
     allQSOs.push(qso);
 
@@ -350,7 +343,7 @@ analyzeBtn.addEventListener("click",async()=>{
     progressBar.style.width=pct+"%";
     progressBar.textContent=pct+"%";
 
-    await new Promise(r=>setTimeout(r, 20)); // Laisse le temps à l’UI d’update la progression
+    await new Promise(r=>setTimeout(r, 50)); // pause 50ms pour progression visible
   }
 
   progressContainer.style.display="none";
