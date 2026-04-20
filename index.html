@@ -450,6 +450,13 @@ analyzeBtn.addEventListener('click', async () => {
 
 /* ---------------- MODULE PROPAGATION ---------------- */
 
+<!-- ...code inchangé jusqu'à la partie MODULE PROPAGATION... -->
+
+<script>
+// ...toutes vos fonctions précédentes inchangées...
+
+/* ---------------- MODULE PROPAGATION (NOUVELLE VERSION) ---------------- */
+
 function extractDatesFromQSOs(qsos) {
   const dates = qsos
     .map(q => q.date)
@@ -458,6 +465,7 @@ function extractDatesFromQSOs(qsos) {
   if (dates.length === 0) return null;
 
   const formatted = dates.map(d =>
+    // ISO format YYYY-MM-DD
     `${d.substring(0,4)}-${d.substring(4,6)}-${d.substring(6,8)}`
   );
 
@@ -468,33 +476,36 @@ function extractDatesFromQSOs(qsos) {
     max: formatted[formatted.length - 1]
   };
 }
-async function fetchPropagation(minDate, maxDate) {
-  const url = `https://kp.gfz.de/kpdata?startdate=${minDate}&enddate=${maxDate}&format=kp1`;
+
+// Nouvelle fonction de récupération via l’API JSON officielle GFZ
+async function fetchPropagationJson(minDate, maxDate) {
+  // On veut les valeurs de Kp, C9, et Ap sur l’intervalle
+  // status=def pour n’avoir que des valeurs définitives si possible
+  const apiUrl = `https://kp.gfz.de/app/json/?start=${minDate}T00:00:00Z&end=${maxDate}T23:59:59Z&index=Kp&status=def`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(apiUrl);
     if (!response.ok) throw new Error("Erreur API propagation");
 
-    const text = await response.text();
-    const lines = text.trim().split("\n");
+    const data = await response.json();
 
-    if (lines.length === 0) return null;
-
-    // On prend la dernière ligne (la plus récente)
-    const cols = lines[lines.length - 1].trim().split(/\s+/);
+    // On prend le dernier index (le plus récent)
+    const len = data.Kp.length;
+    if (len === 0) return null;
 
     return {
-      K: cols[7],     // colonne K
-      Kp: cols[8],    // colonne Kp
-      A: cols[14]     // colonne A
+      K: data.C9 ? data.C9[len-1] : "?", // possible à extraire selon les besoins
+      Kp: data.Kp[len-1] || "?",
+      A: data.Ap ? data.Ap[len-1] : "?"
     };
-
   } catch (e) {
-    console.error("Erreur propagation :", e);
+    console.error("Erreur propagation JSON :", e);
     return null;
   }
 }
+
 function evaluatePropagation(kp) {
+  if (isNaN(kp)) return {text: "Propagation inconnue", color: "gray"};
   if (kp <= 2) return {text: "Bonne propagation", color: "lime"};
   if (kp <= 4) return {text: "Propagation moyenne", color: "orange"};
   return {text: "Mauvaise propagation", color: "red"};
@@ -509,9 +520,9 @@ function displayPropagation(data) {
         return;
     }
 
-    const K = data.K || "?";
-   const Kp = data.Kp || "?";
-    const A = data.A || "?";
+    const K = (data.K!==undefined && data.K!==null) ? data.K : "?";
+    const Kp = (data.Kp!==undefined && data.Kp!==null) ? data.Kp : "?";
+    const A = (data.A!==undefined && data.A!==null) ? data.A : "?";
 
     const evalP = evaluatePropagation(parseFloat(Kp));
 
@@ -524,7 +535,19 @@ function displayPropagation(data) {
     box.style.color = evalP.color;
 }
 
+/* --- MODIFICATION DANS analyseBtn.addEventListener AU NIVEAU DE L'APPEL PROPAGATION --- */
+analyzeBtn.addEventListener('click', async () => {
+  // ... tout le code d’analyse et de traitement QSO reste identique ...
 
+  /* ---------------- PROPAGATION (seule cette partie change) ---------------- */
+  const dateRange = extractDatesFromQSOs(allQSOs);
+  if (dateRange) {
+    // On utilise la nouvelle API
+    const propData = await fetchPropagationJson(dateRange.min, dateRange.max);
+    displayPropagation(propData);
+  }
+});
+// ...reste du code inchangé...
 </script>
 </body>
 </html>
